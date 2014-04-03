@@ -2,12 +2,50 @@ require 'chef_metal/provisioner'
 
 module ChefMetalDocker
   class DockerProvisioner < ChefMetal::Provisioner
+    #
+    # Acquire a machine, generally by provisioning it.  Returns a Machine
+    # object pointing at the machine, allowing useful actions like setup,
+    # converge, execute, file and directory.  The Machine object will have a
+    # "node" property which must be saved to the server (if it is any
+    # different from the original node object).
+    #
+    # ## Parameters
+    # provider - the provider object that is calling this method.
+    # node - node object (deserialized json) representing this machine.  If
+    #        the node has a provisioner_options hash in it, these will be used
+    #        instead of options provided by the provisioner.  TODO compare and
+    #        fail if different?
+    #        node will have node['normal']['provisioner_options'] in it with any options.
+    #        It is a hash with this format:
+    #
+    #           -- provisioner_url: docker:<URL of Docker API endpoint>
+    #           -- image_name: Image name to use, or image_name:tag_name to use a specific tagged revision of that image
+    #           -- run_options: the options to run, e.g. { :cpu_shares => 2, :}
+    #           -- seed_command: the seed command and its arguments, e.g. "echo true"
+    #
+    #        node['normal']['provisioner_output'] will be populated with information
+    #        about the created machine.  For lxc, it is a hash with this
+    #        format:
+    #
+    #           -- provisioner_url: docker:<URL of Docker API endpoint>
+    #           -- docker_name: container name
+    #
     def acquire_machine(provider, node)
+      # Set up the modified node data
+      provisioner_options = node['normal']['provisioner_options']
+      provisioner_output = node['normal']['provisioner_output'] || {
+        'provisioner_url' => "docker:", # TODO put in the Docker API endpoint
+        'container_name' => node['name'] # TODO disambiguate with chef_server_url/path!
+      }
 
+      if !<docker container exists>
+        provider.converge_by "create container #{provisioner_output['']}" do
+          <create docker container>
+        end
+      end
     end
 
     def connect_to_machine(node)
-
     end
 
     def delete_machine(node)
@@ -30,7 +68,12 @@ module ChefMetalDocker
     def load_repository(path)
     end
 
-    def push_image()
+    # Push an image back to Docker
+    def push_image(name)
+    end
+
+    # Pull an image from Docker
+    def pull_image(name)
     end
   end
 end
