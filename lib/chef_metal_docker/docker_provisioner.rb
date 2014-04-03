@@ -2,6 +2,9 @@ require 'chef_metal/provisioner'
 
 module ChefMetalDocker
   class DockerProvisioner < ChefMetal::Provisioner
+
+    include ChefMetalDocker::Helpers::Containers
+
     #
     # Acquire a machine, generally by provisioning it.  Returns a Machine
     # object pointing at the machine, allowing useful actions like setup,
@@ -38,30 +41,66 @@ module ChefMetalDocker
         'container_name' => node['name'] # TODO disambiguate with chef_server_url/path!
       }
 
-      if !<docker container exists>
-        provider.converge_by "create container #{provisioner_output['']}" do
-          <create docker container>
+      container_name = provisioner_output['container_name']
+      seed_command = provisioner_options['seed_command']
+      image_name = provisioner_options['image_name']
+      run_options =  provisioner_options['run_options']
+
+      # Launch the container
+      ChefMetal.inline_resource(self) do
+        docker_container container_name do
+          command   seed_command
+          image     image_name
+          run_options.each do |opt, value|
+            self.send(opt, value)
+          end
+          action [:run]
         end
       end
+
     end
 
     def connect_to_machine(node)
     end
 
     def delete_machine(node)
+      container_name = node['normal']['provisioner_output']['container_name']
+      ChefMetal.inline_resource(self) do
+        docker_container container_name do
+          action [:kill, :remove]
+        end
+      end
     end
 
     def stop_machine(node)
+      container_name = node['normal']['provisioner_output']['container_name']
+      ChefMetal.inline_resource(self) do
+        docker_container container_name do
+          action [:stop]
+        end
+      end
     end
 
     # This is docker-only, not Metal, at the moment.
     # TODO this should be metal.  Find a nice interface.
     def snapshot(node, name=nil)
+      container_name = node['normal']['provisioner_output']['container_name']
+      ChefMetal.inline_resource(self) do
+        docker_container container_name do
+          action [:commit]
+        end
+      end
     end
 
     # Output Docker tar format image
     # TODO this should be metal.  Find a nice interface.
     def save_repository(node, path)
+      container_name = node['normal']['provisioner_output']['container_name']
+      ChefMetal.inline_resource(self) do
+        docker_container container_name do
+          action [:export]
+        end
+      end
     end
 
     # Load Docker tar format image into Docker repository
