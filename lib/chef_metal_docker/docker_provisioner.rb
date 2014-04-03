@@ -1,9 +1,15 @@
 require 'chef_metal/provisioner'
+require 'chef_metal/machine/unix_machine'
+require 'chef_metal/convergence_strategy/no_converge'
+require 'chef_metal_docker/helpers/container'
+require 'chef_metal_docker/docker_transport'
+require 'chef/resource/docker_container'
+require 'chef/provider/docker_container'
 
 module ChefMetalDocker
   class DockerProvisioner < ChefMetal::Provisioner
 
-    include ChefMetalDocker::Helpers::Containers
+    include ChefMetalDocker::Helpers::Container
 
     #
     # Acquire a machine, generally by provisioning it.  Returns a Machine
@@ -38,16 +44,16 @@ module ChefMetalDocker
       provisioner_options = node['normal']['provisioner_options']
       provisioner_output = node['normal']['provisioner_output'] || {
         'provisioner_url' => "docker:", # TODO put in the Docker API endpoint
-        'container_name' => node['name'] # TODO disambiguate with chef_server_url/path!
+        :container_name => node['name'] # TODO disambiguate with chef_server_url/path!
       }
 
-      container_name = provisioner_output['container_name']
-      seed_command = provisioner_options['seed_command']
-      image_name = provisioner_options['image_name']
-      run_options =  provisioner_options['run_options']
+      container_name = provisioner_output[:container_name]
+      seed_command = provisioner_options[:seed_command]
+      image_name = provisioner_options[:image_name]
+      run_options =  provisioner_options[:run_options]
 
       # Launch the container
-      ChefMetal.inline_resource(self) do
+      ChefMetal.inline_resource(provider) do
         docker_container container_name do
           command   seed_command
           image     image_name
@@ -58,9 +64,12 @@ module ChefMetalDocker
         end
       end
 
+      machine_for(node)
     end
 
+
     def connect_to_machine(node)
+      machine_for(node)
     end
 
     def delete_machine(node)
@@ -113,6 +122,23 @@ module ChefMetalDocker
 
     # Pull an image from Docker
     def pull_image(name)
+    end
+    
+    private 
+
+    def machine_for(node)
+      ChefMetal::Machine::UnixMachine.new(node, transport_for(node), convergence_strategy_for(node))
+    end
+
+    def convergence_strategy_for(node)
+      @convergence_strategy ||= begin
+                                  ChefMetal::ConvergenceStrategy::NoConverge.new
+                                end
+    end
+
+    def transport_for(node)
+      #provisioner_output = node['normal']['provisioner_output']
+      ChefMetalDocker::DockerTransport.new()
     end
   end
 end

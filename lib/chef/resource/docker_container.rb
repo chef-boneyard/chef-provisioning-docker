@@ -28,7 +28,7 @@ class Chef::Resource::DockerContainer < Chef::Resource::LWRPBase
   attribute :force, :kind_of => [TrueClass, FalseClass], :default => false
   attribute :hostname, :kind_of => [String]
   attribute :id, :kind_of => [String]
-  attribute :init_type, :kind_of => [FalseClass, String], :default => node['docker']['container_init_type']
+  attribute :init_type, :kind_of => [FalseClass, String], :default => nil
   attribute :init_template, :kind_of => [String]
   attribute :link, :kind_of => [String, Array]
   attribute :label, :kind_of => [String]
@@ -37,9 +37,10 @@ class Chef::Resource::DockerContainer < Chef::Resource::LWRPBase
   attribute :message, :kind_of => [String]
   attribute :networking, :kind_of => [TrueClass, FalseClass]
   attribute :opt, :kind_of => [String, Array]
-  attribute :port, :kind_of => [String, Array]
+  attribute :port, :kind_of => [Fixnum, String, Array]
   attribute :privileged, :kind_of => [TrueClass, FalseClass]
   attribute :publish_exposed_ports, :kind_of => [TrueClass, FalseClass], :default => false
+  attribute :public_port, :kind_of => [Fixnum]
   attribute :remove_automatically, :kind_of => [TrueClass, FalseClass], :default => false
   attribute :repository, :kind_of => [String]
   attribute :run, :kind_of => [String]

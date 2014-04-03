@@ -3,7 +3,7 @@ module ChefMetalDocker
     module Container
       # These are helper functions that the Chef::Provider::DockerContainer class
       # will use to to help execute commands and analyze the current system
-      odule Helpers
+      module Helpers
 
         def cidfile
           if service?
@@ -22,7 +22,11 @@ module ChefMetalDocker
         end
 
         def container_id_matches?(id)
-          id.start_with?(new_resource.id)
+          if new_resource.id == nil
+            false
+          else 
+            id.start_with?(new_resource.id)
+          end 
         end
 
         def container_image_matches?(image)
@@ -101,7 +105,7 @@ module ChefMetalDocker
           end
         end
 
-        def command_timeout_error_message
+        def command_timeout_error_message(cmd)
           <<-EOM
 
   Command timed out:

@@ -74,7 +74,7 @@ EOH
     end
 
     def timeout
-      node['docker']['docker_daemon_timeout']
+      10
     end
 
     # This is based upon wait_until_ready! from the opscode jenkins cookbook.
@@ -125,7 +125,7 @@ EOM
       begin
         shell_out(cmd, :timeout => timeout)
       rescue Mixlib::ShellOut::CommandTimeout
-        raise CommandTimeout, command_timeout_error_message
+        raise CommandTimeout, command_timeout_error_message(cmd)
       end
     end
 
