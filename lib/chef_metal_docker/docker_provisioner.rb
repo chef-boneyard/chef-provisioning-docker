@@ -19,7 +19,7 @@ module ChefMetalDocker
     # different from the original node object).
     #
     # ## Parameters
-    # provider - the provider object that is calling this method.
+    # action_handler - the action_handler object that plugs into the host.
     # node - node object (deserialized json) representing this machine.  If
     #        the node has a provisioner_options hash in it, these will be used
     #        instead of options provided by the provisioner.  TODO compare and
@@ -39,7 +39,7 @@ module ChefMetalDocker
     #           -- provisioner_url: docker:<URL of Docker API endpoint>
     #           -- docker_name: container name
     #
-    def acquire_machine(provider, node)
+    def acquire_machine(action_handler, node)
       # Set up the modified node data
       provisioner_options = node['normal']['provisioner_options']
       provisioner_output = node['normal']['provisioner_output'] || {
@@ -53,7 +53,7 @@ module ChefMetalDocker
       run_options =  provisioner_options[:run_options]
 
       # Launch the container
-      ChefMetal.inline_resource(provider) do
+      ChefMetal.inline_resource(action_handler) do
         docker_container container_name do
           command   seed_command
           image     image_name
@@ -72,18 +72,18 @@ module ChefMetalDocker
       machine_for(node)
     end
 
-    def delete_machine(node)
+    def delete_machine(action_handler, node)
       container_name = node['normal']['provisioner_output']['container_name']
-      ChefMetal.inline_resource(self) do
+      ChefMetal.inline_resource(action_handler) do
         docker_container container_name do
           action [:kill, :remove]
         end
       end
     end
 
-    def stop_machine(node)
+    def stop_machine(action_handler, node)
       container_name = node['normal']['provisioner_output']['container_name']
-      ChefMetal.inline_resource(self) do
+      ChefMetal.inline_resource(action_handler) do
         docker_container container_name do
           action [:stop]
         end
@@ -92,9 +92,9 @@ module ChefMetalDocker
 
     # This is docker-only, not Metal, at the moment.
     # TODO this should be metal.  Find a nice interface.
-    def snapshot(node, name=nil)
+    def snapshot(action_handler, node, name=nil)
       container_name = node['normal']['provisioner_output']['container_name']
-      ChefMetal.inline_resource(self) do
+      ChefMetal.inline_resource(action_handler) do
         docker_container container_name do
           action [:commit]
         end
@@ -103,9 +103,9 @@ module ChefMetalDocker
 
     # Output Docker tar format image
     # TODO this should be metal.  Find a nice interface.
-    def save_repository(node, path)
+    def save_repository(action_handler, node, path)
       container_name = node['normal']['provisioner_output']['container_name']
-      ChefMetal.inline_resource(self) do
+      ChefMetal.inline_resource(action_handler) do
         docker_container container_name do
           action [:export]
         end
@@ -123,8 +123,8 @@ module ChefMetalDocker
     # Pull an image from Docker
     def pull_image(name)
     end
-    
-    private 
+
+    private
 
     def machine_for(node)
       ChefMetal::Machine::UnixMachine.new(node, transport_for(node), convergence_strategy_for(node))

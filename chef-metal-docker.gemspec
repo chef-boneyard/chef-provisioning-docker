@@ -13,7 +13,7 @@ Gem::Specification.new do |s|
   s.homepage = 'https://github.com/opscode/chef-metal-docker'
 
   s.add_dependency 'chef'
-  s.add_dependency 'chef-metal'
+  s.add_dependency 'chef-metal', '~> 0.5'
 
   s.add_development_dependency 'rspec'
   s.add_development_dependency 'rake'
