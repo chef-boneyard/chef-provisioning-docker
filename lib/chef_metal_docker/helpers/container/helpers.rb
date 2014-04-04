@@ -30,7 +30,11 @@ module ChefMetalDocker
         end
 
         def container_image_matches?(image)
-          image.include?(new_resource.image)
+          if new_resource.image == nil
+            false
+          else
+            image.include?(new_resource.image)
+          end
         end
 
         def container_name_matches_if_exists?(names)
