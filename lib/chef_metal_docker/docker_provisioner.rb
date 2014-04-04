@@ -49,16 +49,14 @@ module ChefMetalDocker
 
       container_name = provisioner_output[:container_name]
       seed_command = provisioner_options[:seed_command] 
-      if seed_command == :chef_client
-        # non-daemon chef run
-        seed_command = 'chef-client -d blahblah'
-      elsif seed_command == :chef_client_service
-        # daemonized chef run
-        seed_command = 'chef-client blahblah'
-      elsif seed_command != nil
-        # do nothing
+      if provisioner_options[:seed_command] == :chef_client
+        seed_command = "chef-client blahblah"
+      elsif provisioner_options[:seed_command] == :chef_client_service
+        seed_command = "chef-client -d blahblah"
+      elsif provisioner_options[:seed_command] != nil
+        seed_command = provisioner_options[:seed_command]
       else
-        'echo "ohai chef-metal"'
+        seed_command = 'echo "ohai chef-metal"'
       end
       image_name = provisioner_options[:image_name] 
       run_options =  provisioner_options[:run_options] || {}

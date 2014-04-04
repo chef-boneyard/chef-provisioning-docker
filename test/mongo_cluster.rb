@@ -1,6 +1,6 @@
 
 machine "ubuntu_chef_client" do
-  proviserion_options :image_name => 'ubuntu',
+  provisioner_option :image_name => 'ubuntu',
     :seed_command => '',
     :run_options => {
 

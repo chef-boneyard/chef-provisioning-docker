@@ -1,0 +1,5 @@
+source "https://api.berkshelf.com"
+
+cookbook "ntp", github: "gmiranda23/ntp"
+cookbook "docker", github: "tduffield/chef-docker"
+cookbook "mongodb", github: "edelight/chef-mongodb"
