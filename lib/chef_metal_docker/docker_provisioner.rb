@@ -37,7 +37,7 @@ module ChefMetalDocker
     #        It is a hash with this format:
     #
     #           -- provisioner_url: docker:<URL of Docker API endpoint>
-    #           -- base_image: Base image name to use, or image_name:tag_name to use a specific tagged revision of that image
+    #           -- base_image: Base image name to use, or repository_name:tag_name to use a specific tagged revision of that image
     #           -- command: command to run (if unspecified or nil, will spin up the container.  If false, will not run anything and will just leave the image alone.)
     #           -- container_options: options for container create (see http://docs.docker.io/en/latest/reference/api/docker_remote_api_v1.10/#create-a-container)
     #           -- host_options: options for container start (see http://docs.docker.io/en/latest/reference/api/docker_remote_api_v1.10/#start-a-container)
@@ -48,23 +48,24 @@ module ChefMetalDocker
     #        format:
     #
     #           -- provisioner_url: docker:<URL of Docker API endpoint>
-    #           -- docker_name: container name
+    #           -- container_name: docker container name
+    #           -- repository_name: docker image repository name from which container was inflated
     #
     def acquire_machine(action_handler, node)
       # Set up the modified node data
       provisioner_options = node['normal']['provisioner_options']
       provisioner_output = node['normal']['provisioner_output'] || {
         'provisioner_url' => "docker:", # TODO put in the Docker API endpoint
-        'image_name' => node['name'], # TODO disambiguate with chef_server_url/path!
+        'repository_name' => node['name'], # TODO disambiguate with chef_server_url/path!
         'container_name' => node['name'] # TODO disambiguate with chef_server_url/path!
       }
 
       container_name = provisioner_output['container_name']
-      base_image_name = provisioner_options['base_image']
+      base_repository_name = provisioner_options['base_image']
 
       # Tag the initial image.  We aren't going to actually DO anything yet.
       # We will start up after we converge!
-      base_image = Docker::Image.get(base_image_name)
+      base_image = Docker::Image.get(base_repository_name)
       begin
         # If the current image does NOT have the base_image as an ancestor,
         # we are going to have to re-tag it and rebuild.
@@ -73,7 +74,7 @@ module ChefMetalDocker
         else
           tag_base_image = true
         end
-      rescue Docker::NotFoundError
+      rescue Docker::Error::NotFoundError
         tag_base_image = true
       end
       if tag_base_image
@@ -177,10 +178,10 @@ module ChefMetalDocker
           container_configuration['Cmd'] = %w(while 1; sleep 1000; end)
         end
         ChefMetalDocker::DockerConvergenceStrategy.new(strategy,
+          provisioner_output['repository_name'],
           provisioner_output['container_name'],
-          provisioner_output['image_name'],
           container_configuration,
-          provisioner_options['host_configuration'],
+          provisioner_options['host_configuration'] || {},
           credentials,
           connection)
       end
@@ -188,7 +189,7 @@ module ChefMetalDocker
 
     def transport_for(node)
       provisioner_output = node['normal']['provisioner_output']
-      ChefMetalDocker::DockerTransport.new(provisioner_options['container_name'], provisioner_output['image_name'], credentials, connection)
+      ChefMetalDocker::DockerTransport.new(provisioner_options['container_name'], provisioner_output['repository_name'], credentials, connection)
     end
   end
 end

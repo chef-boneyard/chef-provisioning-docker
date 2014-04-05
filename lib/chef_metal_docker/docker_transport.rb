@@ -4,27 +4,32 @@ require 'archive/tar/minitar'
 
 module ChefMetalDocker
   class DockerTransport < ChefMetal::Transport
-    def initialize(image_name, container_name, credentials, connection)
-      @image_name = image_name
+    def initialize(repository_name, container_name, credentials, connection)
+      @repository_name = repository_name
+      @image = Docker::Image.get("#{repository_name}:latest", connection)
       @container_name = container_name
-      @image = Docker::Image.get(image_name)
       @credentials = credentials
       @connection = connection
       @forwarded_ports = []
     end
 
     attr_reader :container_name
-    attr_reader :image_name
+    attr_reader :repository_name
     attr_reader :image
     attr_reader :credentials
     attr_reader :connection
     attr_reader :forwarded_ports
 
     def execute(command)
-      container = Docker::Container.create({
+      begin
+        # Delete the container if it exists and is dormant
+        connection.delete("/containers/#{container_name}")
+      rescue Docker::Error::NotFoundError
+      end
+      @container = Docker::Container.create({
         'name' => container_name,
-        'Image' => image_name,
-        'Cmd' => (command.is_a?(String) ? command.split(/\s+/) : command)
+        'Image' => "#{repository_name}:latest",
+        'Cmd' => (command.is_a?(String) ? command.split(/\s+/) : command),
         'ExposedPorts' => @forwarded_ports.inject({}) do |result, remote_port, local_port|
           result["#{remote_port}/tcp"] = {}
           result
@@ -33,23 +38,23 @@ module ChefMetalDocker
         'AttachStderr' => true,
         'TTY' => false
       }, connection)
-      container.start({
+      @container.start({
         'PortBindings' => @forwarded_ports.inject({}) do |result, remote_port, local_port|
           result["#{remote_port}/tcp"] = [{
-            'HostIp': '127.0.0.1',
-            'HostPort': local_port
+            'HostIp' => '127.0.0.1',
+            'HostPort' => local_port
           }]
           result
         end
       })
-      stdout, stderr = container.attach
-      exit_status = container.wait
-      @image = container.commit('repo' => image_name)
-      DockerResult.new(stdout.join(''), stderr.join(''), exit_status)
+      stdout, stderr = @container.attach
+      exit_status = @container.wait
+      @image = @container.commit('repo' => repository_name)
+      DockerResult.new(stdout.join(''), stderr.join(''), exit_status['StatusCode'])
     end
 
     def read_file(path)
-      container = Docker::Container.create({ 'Image' => image_name }, connection)
+      container = Docker::Container.create({ 'Image' => "#{repository_name}:latest" }, connection)
       tarfile = ''
       # NOTE: this would be more efficient if we made it a stream and passed that to Minitar
       container.copy(path) do |block|
@@ -72,7 +77,7 @@ module ChefMetalDocker
       Tempfile.new do |file|
         file.write(content)
         file.close
-        @image = @image.insert_local('localPath' => file.path, 'outputPath' => path, 't' => image_name)
+        @image = @image.insert_local('localPath' => file.path, 'outputPath' => path, 't' => "#{repository_name}:latest")
       end
     end
 
@@ -88,7 +93,7 @@ module ChefMetalDocker
     end
 
     def upload_file(local_path, path)
-      @image = @image.insert_local('localPath' => local_path, 'outputPath' => path, 't' => image_name)
+      @image = @image.insert_local('localPath' => local_path, 'outputPath' => path, 't' => "#{repository_name}:latest")
     end
 
     # Forward requests to a port on the guest to a server on the host

@@ -3,10 +3,10 @@ require 'docker'
 
 module ChefMetalDocker
   class DockerConvergenceStrategy < ChefMetal::ConvergenceStrategy
-    def initialize(real_convergence_strategy, container_name, image_name, container_configuration, host_configuration, credentials, connection)
+    def initialize(real_convergence_strategy, repository_name, container_name, container_configuration, host_configuration, credentials, connection)
       @real_convergence_strategy = real_convergence_strategy
+      @repository_name = repository_name
       @container_name = container_name
-      @image_name = image_name
       @container_configuration = container_configuration
       @host_configuration = host_configuration
       @credentials = credentials
@@ -15,7 +15,7 @@ module ChefMetalDocker
 
     attr_reader :real_convergence_strategy
     attr_reader :container_name
-    attr_reader :image_name
+    attr_reader :repository_name
     attr_reader :container_configuration
     attr_reader :host_configuration
     attr_reader :credentials
@@ -31,9 +31,13 @@ module ChefMetalDocker
       # After converge, we bring up the container command
       if container_configuration
         action_handler.perform_action "Start container command"
+        begin
+          connection.delete("/containers/#{container_name}")
+        rescue Docker::Error::NotFoundError
+        end
         container = Docker::Container.create({
           'name' => container_name,
-          'Image' => image_name
+          'Image' => "#{repository_name}:latest"
         }.merge(container_configuration), connection)
         container.start!(host_configuration)
         # We don't bother waiting ... our only job is to bring it up.
