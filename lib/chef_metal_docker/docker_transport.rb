@@ -30,14 +30,16 @@ module ChefMetalDocker
         'name' => container_name,
         'Image' => "#{repository_name}:latest",
         'Cmd' => (command.is_a?(String) ? command.split(/\s+/) : command),
-        'ExposedPorts' => @forwarded_ports.inject({}) do |result, remote_port, local_port|
-          result["#{remote_port}/tcp"] = {}
-          result
-        end,
+#        'ExposedPorts' => @forwarded_ports.inject({}) do |result, remote_port, local_port|
+#          result["#{remote_port}/tcp"] = {}
+#          result
+#        end,
         'AttachStdout' => true,
         'AttachStderr' => true,
         'TTY' => false
       }, connection)
+
+      # Start the container
       @container.start({
         'PortBindings' => @forwarded_ports.inject({}) do |result, remote_port, local_port|
           result["#{remote_port}/tcp"] = [{
@@ -47,18 +49,41 @@ module ChefMetalDocker
           result
         end
       })
-      stdout, stderr = @container.attach
+
+      # Capture stdout / stderr
+      stdout = ''
+      stderr = ''
+      @container.attach do |type, str|
+        case type
+        when :stdout
+          stdout << str
+        when :stderr
+          stderr << str
+        else
+          raise "unexpected message type #{type}"
+        end
+      end
+
+      # Capture exit code
       exit_status = @container.wait
+
       @image = @container.commit('repo' => repository_name) if commit
-      DockerResult.new(stdout.join(''), stderr.join(''), exit_status['StatusCode'])
+      DockerResult.new(stdout, stderr, exit_status['StatusCode'])
     end
 
     def read_file(path)
-      container = Docker::Container.create({ 'Image' => "#{repository_name}:latest" }, connection)
-      tarfile = ''
-      # NOTE: this would be more efficient if we made it a stream and passed that to Minitar
-      container.copy(path) do |block|
-        tarfile << block
+      container = Docker::Container.create({
+        'Image' => "#{repository_name}:latest",
+        'Cmd' => %w(echo true)
+      }, connection)
+      begin
+        tarfile = ''
+        # NOTE: this would be more efficient if we made it a stream and passed that to Minitar
+        container.copy(path) do |block|
+          tarfile << block
+        end
+      ensure
+        container.delete
       end
 
       output = ''
@@ -107,6 +132,42 @@ module ChefMetalDocker
     end
 
     def available?
+    end
+
+    private
+
+    # Copy of container.attach with timeout support
+    def attach_with_timeout(container, options = {}, read_timeout, &block)
+      opts = {
+        :stream => true, :stdout => true, :stderr => true
+      }.merge(options)
+      # Creates list to store stdout and stderr messages
+      msgs = Docker::Messages.new
+      connection.post(
+        "/containers/#{container.id}/attach",
+        opts,
+        :response_block => attach_for(block, msgs),
+        :read_timeout => read_timeout
+      )
+      [msgs.stdout_messages, msgs.stderr_messages]
+    end
+
+    # Method that takes chunks and calls the attached block for each mux'd message
+    def attach_for(block, msg_stack)
+      messages = Docker::Messages.new
+      lambda do |c,r,t|
+        messages = messages.decipher_messages(c)
+        msg_stack.append(messages)
+
+        unless block.nil?
+          messages.stdout_messages.each do |msg|
+            block.call(:stdout, msg)
+          end
+          messages.stderr_messages.each do |msg|
+            block.call(:stderr, msg)
+          end
+        end
+      end
     end
 
     class DockerResult
