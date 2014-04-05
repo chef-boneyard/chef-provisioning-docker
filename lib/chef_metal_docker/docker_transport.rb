@@ -1,6 +1,7 @@
 require 'chef_metal/transport'
 require 'docker'
 require 'archive/tar/minitar'
+require 'shellwords'
 
 module ChefMetalDocker
   class DockerTransport < ChefMetal::Transport
@@ -29,26 +30,14 @@ module ChefMetalDocker
       @container = Docker::Container.create({
         'name' => container_name,
         'Image' => "#{repository_name}:latest",
-        'Cmd' => (command.is_a?(String) ? command.split(/\s+/) : command),
-#        'ExposedPorts' => @forwarded_ports.inject({}) do |result, remote_port, local_port|
-#          result["#{remote_port}/tcp"] = {}
-#          result
-#        end,
+        'Cmd' => (command.is_a?(String) ? Shellwords.shellsplit(command) : command),
         'AttachStdout' => true,
         'AttachStderr' => true,
         'TTY' => false
       }, connection)
 
       # Start the container
-      @container.start({
-        'PortBindings' => @forwarded_ports.inject({}) do |result, remote_port, local_port|
-          result["#{remote_port}/tcp"] = [{
-            'HostIp' => '127.0.0.1',
-            'HostPort' => local_port
-          }]
-          result
-        end
-      })
+      @container.start
 
       # Capture stdout / stderr
       stdout = ''
@@ -125,7 +114,7 @@ module ChefMetalDocker
 
     # Forward requests to a port on the guest to a server on the host
     def forward_remote_port_to_local(remote_port, local_port)
-      @forwarded_ports << [ remote_port, local_port ]
+      @forwarded_ports << { :remote => remote_port, :local => local_port }
     end
 
     def disconnect
