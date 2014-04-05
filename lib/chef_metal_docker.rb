@@ -1,5 +1,4 @@
 require 'chef_metal'
 require 'chef_metal_docker/docker_provisioner'
-
-module ChefMetalDocker
-end
+require 'chef/resource/docker_container'
+require 'chef/provider/docker_container'

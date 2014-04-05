@@ -1,15 +1,24 @@
 require 'chef_metal/provisioner'
 require 'chef_metal/machine/unix_machine'
 require 'chef_metal/convergence_strategy/no_converge'
+require 'chef_metal/convergence_strategy/install_cached'
 require 'chef_metal_docker/helpers/container'
 require 'chef_metal_docker/docker_transport'
-require 'chef/resource/docker_container'
-require 'chef/provider/docker_container'
+require 'chef_metal_docker/docker_convergence_strategy'
+require 'docker'
 
 module ChefMetalDocker
   class DockerProvisioner < ChefMetal::Provisioner
 
     include ChefMetalDocker::Helpers::Container
+
+    def initialize(credentials = nil, connection = Docker.connection)
+      @credentials = credentials
+      @connection = connection
+    end
+
+    attr_reader :credentials
+    attr_reader :connection
 
     #
     # Acquire a machine, generally by provisioning it.  Returns a Machine
@@ -28,9 +37,11 @@ module ChefMetalDocker
     #        It is a hash with this format:
     #
     #           -- provisioner_url: docker:<URL of Docker API endpoint>
-    #           -- image_name: Image name to use, or image_name:tag_name to use a specific tagged revision of that image
-    #           -- run_options: the options to run, e.g. { :cpu_shares => 2, :}
-    #           -- seed_command: the seed command and its arguments, e.g. "echo true"
+    #           -- base_image: Base image name to use, or image_name:tag_name to use a specific tagged revision of that image
+    #           -- command: command to run (if unspecified or nil, will spin up the container.  If false, will not run anything and will just leave the image alone.)
+    #           -- container_options: options for container create (see http://docs.docker.io/en/latest/reference/api/docker_remote_api_v1.10/#create-a-container)
+    #           -- host_options: options for container start (see http://docs.docker.io/en/latest/reference/api/docker_remote_api_v1.10/#start-a-container)
+    #           -- convergence_strategy: :no_converge or :install_cached (former will not converge, latter will set up chef-client and converge)
     #
     #        node['normal']['provisioner_output'] will be populated with information
     #        about the created machine.  For lxc, it is a hash with this
@@ -44,41 +55,38 @@ module ChefMetalDocker
       provisioner_options = node['normal']['provisioner_options']
       provisioner_output = node['normal']['provisioner_output'] || {
         'provisioner_url' => "docker:", # TODO put in the Docker API endpoint
-        :container_name => node['name'] # TODO disambiguate with chef_server_url/path!
+        'image_name' => node['name'], # TODO disambiguate with chef_server_url/path!
+        'container_name' => node['name'] # TODO disambiguate with chef_server_url/path!
       }
 
-      container_name = provisioner_output[:container_name]
-      seed_command = provisioner_options[:seed_command] 
-      if provisioner_options[:seed_command] == :chef_client
-        seed_command = "chef-client blahblah"
-      elsif provisioner_options[:seed_command] == :chef_client_service
-        seed_command = "chef-client -d blahblah"
-      elsif provisioner_options[:seed_command] != nil
-        seed_command = provisioner_options[:seed_command]
-      else
-        seed_command = 'echo "ohai chef-metal"'
-      end
-      image_name = provisioner_options[:image_name] 
-      run_options =  provisioner_options[:run_options] || {}
+      container_name = provisioner_output['container_name']
+      base_image_name = provisioner_options['base_image']
 
-      # Launch the container
-      ChefMetal.inline_resource(action_handler) do
-        docker_container container_name do
-          container_name  container_name
-          command         seed_command
-          image           image_name
-          run_options.each do |opt, value|
-            self.send(opt, value)
-          end
-          action [:run]
+      # Tag the initial image.  We aren't going to actually DO anything yet.
+      # We will start up after we converge!
+      base_image = Docker::Image.get(base_image_name)
+      begin
+        # If the current image does NOT have the base_image as an ancestor,
+        # we are going to have to re-tag it and rebuild.
+        if base_image.history.any? { |entry| entry['Id'] == base_image.id }
+          tag_base_image = false
+        else
+          tag_base_image = true
+        end
+      rescue Docker::NotFoundError
+        tag_base_image = true
+      end
+      if tag_base_image
+        action_handler.perform_action "Tag base image #{base_image} as container #{container_name}" do
+          base_image.tag(credentials, 'repo' => container_name, 'force' => true)
         end
       end
 
       node['normal']['provisioner_output'] = provisioner_output
 
+      # Nothing else needs to happen until converge.  We already have the image we need!
       machine_for(node)
     end
-
 
     def connect_to_machine(node)
       machine_for(node)
@@ -149,13 +157,38 @@ module ChefMetalDocker
 
     def convergence_strategy_for(node)
       @convergence_strategy ||= begin
-                                  ChefMetal::ConvergenceStrategy::NoConverge.new
-                                end
+        provisioner_output = node['normal']['provisioner_output']
+        provisioner_options = node['normal']['provisioner_options']
+        strategy = case provisioner_options['convergence_strategy']
+          when :no_converge
+            ChefMetal::ConvergenceStrategy::NoConverge.new
+          else
+            ChefMetal::ConvergenceStrategy::InstallCached.new
+          end
+        container_configuration = provisioner_options['container_configuration'] || {}
+        if provisioner_options['command']
+          command = provisioner_options['command']
+          command = command.split(/\s+/) if command.is_a?(String)
+          container_configuration['Cmd'] = command
+        elsif provisioner_options['command'] == false
+          container_configuration = nil
+        else
+          # TODO how do we get things started?  runit?  cron?  wassup here.
+          container_configuration['Cmd'] = %w(while 1; sleep 1000; end)
+        end
+        ChefMetalDocker::DockerConvergenceStrategy.new(strategy,
+          provisioner_output['container_name'],
+          provisioner_output['image_name'],
+          container_configuration,
+          provisioner_options['host_configuration'],
+          credentials,
+          connection)
+      end
     end
 
     def transport_for(node)
-      #provisioner_output = node['normal']['provisioner_output']
-      ChefMetalDocker::DockerTransport.new()
+      provisioner_output = node['normal']['provisioner_output']
+      ChefMetalDocker::DockerTransport.new(provisioner_options['container_name'], provisioner_output['image_name'], credentials, connection)
     end
   end
 end
