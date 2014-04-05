@@ -61,20 +61,22 @@ module ChefMetalDocker
         tarfile << block
       end
 
+      output = ''
       Archive::Tar::Minitar::Input.open(StringIO.new(tarfile)) do |inp|
         inp.each do |entry|
-          output = ''
           while next_output = entry.read
             output << next_output
           end
           entry.close
         end
       end
+
+      output
     end
 
     def write_file(path, content)
       # TODO hate tempfiles.  Find an in memory way.
-      Tempfile.new do |file|
+      Tempfile.open('metal_docker_write_file') do |file|
         file.write(content)
         file.close
         @image = @image.insert_local('localPath' => file.path, 'outputPath' => path, 't' => "#{repository_name}:latest")
@@ -82,14 +84,14 @@ module ChefMetalDocker
     end
 
     def download_file(path, local_path)
-      container = Docker::Container.create({ 'Image' => @image.id }, connection)
-      tarfile = ''
-      # NOTE: this would be more efficient if we made it a stream and passed that to Minitar
-      container.copy(path) do |block|
-        tarfile << block
+      # TODO stream
+      file = File.open(local_path, 'w')
+      begin
+        file.write(read_file(path))
+        file.close
+      rescue
+        File.delete(file)
       end
-
-      Archive::Tar::Minitar.unpack(StringIO.new(tarfile), local_path)
     end
 
     def upload_file(local_path, path)
