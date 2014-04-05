@@ -20,7 +20,7 @@ module ChefMetalDocker
     attr_reader :connection
     attr_reader :forwarded_ports
 
-    def execute(command)
+    def execute(command, commit=true)
       begin
         # Delete the container if it exists and is dormant
         connection.delete("/containers/#{container_name}")
@@ -49,7 +49,7 @@ module ChefMetalDocker
       })
       stdout, stderr = @container.attach
       exit_status = @container.wait
-      @image = @container.commit('repo' => repository_name)
+      @image = @container.commit('repo' => repository_name) if commit
       DockerResult.new(stdout.join(''), stderr.join(''), exit_status['StatusCode'])
     end
 

@@ -1,10 +1,10 @@
 require 'chef_metal/provisioner'
-require 'chef_metal/machine/unix_machine'
 require 'chef_metal/convergence_strategy/no_converge'
 require 'chef_metal/convergence_strategy/install_cached'
 require 'chef_metal_docker/helpers/container'
 require 'chef_metal_docker/docker_transport'
 require 'chef_metal_docker/docker_convergence_strategy'
+require 'chef_metal_docker/docker_unix_machine'
 require 'docker'
 
 module ChefMetalDocker
@@ -153,7 +153,7 @@ module ChefMetalDocker
     private
 
     def machine_for(node)
-      ChefMetal::Machine::UnixMachine.new(node, transport_for(node), convergence_strategy_for(node))
+      ChefMetalDocker::DockerUnixMachine.new(node, transport_for(node), convergence_strategy_for(node))
     end
 
     def convergence_strategy_for(node)
