@@ -2,6 +2,8 @@ require 'chef_metal/transport'
 require 'docker'
 require 'archive/tar/minitar'
 require 'shellwords'
+require 'uri'
+require 'socket'
 
 module ChefMetalDocker
   class DockerTransport < ChefMetal::Transport
@@ -11,7 +13,6 @@ module ChefMetalDocker
       @container_name = container_name
       @credentials = credentials
       @connection = connection
-      @forwarded_ports = []
     end
 
     attr_reader :container_name
@@ -19,7 +20,6 @@ module ChefMetalDocker
     attr_reader :image
     attr_reader :credentials
     attr_reader :connection
-    attr_reader :forwarded_ports
 
     def execute(command, commit=true)
       begin
@@ -112,9 +112,20 @@ module ChefMetalDocker
       @image = @image.insert_local('localPath' => local_path, 'outputPath' => path, 't' => "#{repository_name}:latest")
     end
 
-    # Forward requests to a port on the guest to a server on the host
-    def forward_remote_port_to_local(remote_port, local_port)
-      @forwarded_ports << { :remote => remote_port, :local => local_port }
+    def make_url_available_to_remote(url)
+      # The host is already open to the container.  Just find out its address and return it!
+      uri = URI(url)
+      host = Socket.getaddrinfo(uri.host, uri.scheme, nil, :STREAM)[0][3]
+      if host == '127.0.0.1'
+        result = execute('ip route ls', false)
+        if result.stdout =~ /default via (\S+)/
+          uri.host = $1
+          return uri.to_s
+        else
+          raise "Cannot forward port: ip route ls did not show default in expected format.\nSTDOUT: #{result.stdout}"
+        end
+      end
+      url
     end
 
     def disconnect
