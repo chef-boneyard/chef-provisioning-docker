@@ -30,16 +30,21 @@ module ChefMetalDocker
 
       # After converge, we bring up the container command
       if container_configuration
-        action_handler.perform_action "Start container command"
+
         begin
-          connection.delete("/containers/#{container_name}")
+          container = Docker::Container.get(container_name)
+          action_handler.perform_action "Delete existing container" do
+            container.delete
+          end
         rescue Docker::Error::NotFoundError
         end
-        container = Docker::Container.create({
-          'name' => container_name,
-          'Image' => "#{repository_name}:latest"
-        }.merge(container_configuration), connection)
-        container.start!(host_configuration)
+        action_handler.perform_action "Create new container and run container_configuration['Cmd']" do
+          container = Docker::Container.create({
+            'name' => container_name,
+            'Image' => "#{repository_name}:latest"
+          }.merge(container_configuration), connection)
+          container.start!(host_configuration)
+        end
         # We don't bother waiting ... our only job is to bring it up.
       end
     end
