@@ -21,12 +21,15 @@ module ChefMetalDocker
     attr_reader :credentials
     attr_reader :connection
 
-    def execute(command, commit=true)
+    def execute(command, options={})
+      Chef::Log.debug("execute '#{command}'")
       begin
         # Delete the container if it exists and is dormant
         connection.delete("/containers/#{container_name}")
+        Chef::Log.debug("deleted /containers/#{container_name}")
       rescue Docker::Error::NotFoundError
       end
+      Chef::Log.debug("Creating #{container_name} from #{repository_name}:latest")
       @container = Docker::Container.create({
         'name' => container_name,
         'Image' => "#{repository_name}:latest",
@@ -36,9 +39,11 @@ module ChefMetalDocker
         'TTY' => false
       }, connection)
 
+      Chef::Log.debug("Starting #{container_name}")
       # Start the container
       @container.start
 
+      Chef::Log.debug("Attaching to #{container_name}")
       # Capture stdout / stderr
       stdout = ''
       stderr = ''
@@ -46,17 +51,25 @@ module ChefMetalDocker
         case type
         when :stdout
           stdout << str
+          stream_chunk(options, stdout, nil)
         when :stderr
           stderr << str
+          stream_chunk(options, nil, stderr)
         else
           raise "unexpected message type #{type}"
         end
       end
 
+      Chef::Log.debug("Grabbing exit status from #{container_name}")
       # Capture exit code
       exit_status = @container.wait
 
-      @image = @container.commit('repo' => repository_name) if commit
+      unless options[:read_only]
+        Chef::Log.debug("Commiting #{container_name} as #{repository_name}")
+        @image = @container.commit('repo' => repository_name)
+      end
+
+      Chef::Log.debug("Execute complete: status #{exit_status['StatusCode']}")
       DockerResult.new(stdout, stderr, exit_status['StatusCode'])
     end
 
@@ -117,7 +130,7 @@ module ChefMetalDocker
       uri = URI(url)
       host = Socket.getaddrinfo(uri.host, uri.scheme, nil, :STREAM)[0][3]
       if host == '127.0.0.1'
-        result = execute('ip route ls', false)
+        result = execute('ip route ls', :read_only => true)
         if result.stdout =~ /default via (\S+)/
           uri.host = $1
           return uri.to_s
