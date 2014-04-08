@@ -22,7 +22,7 @@ module ChefMetalDocker
     attr_reader :connection
 
     def execute(command, options={})
-      Chef::Log.debug("execute '#{command}'")
+      Chef::Log.debug("execute '#{command}' with options #{options}")
       begin
         # Delete the container if it exists and is dormant
         connection.delete("/containers/#{container_name}")
@@ -65,7 +65,7 @@ module ChefMetalDocker
       exit_status = @container.wait
 
       unless options[:read_only]
-        Chef::Log.debug("Commiting #{container_name} as #{repository_name}")
+        Chef::Log.debug("Committing #{container_name} as #{repository_name}")
         @image = @container.commit('repo' => repository_name)
       end
 
@@ -201,8 +201,8 @@ module ChefMetalDocker
       def error!
         if exitstatus != 0
           msg = "Error: command '#{command}' exited with code #{exitstatus}.\n"
-          msg << "STDOUT: #{stdout}" if !options[:stream] && !options[:stream_stdout]
-          msg << "STDERR: #{stderr}" if !options[:stream] && !options[:stream_stderr]
+          msg << "STDOUT: #{stdout}" if !options[:stream] && !options[:stream_stdout] && Chef::Config.log_level != :debug
+          msg << "STDERR: #{stderr}" if !options[:stream] && !options[:stream_stderr] && Chef::Config.log_level != :debug
         end
       end
     end
