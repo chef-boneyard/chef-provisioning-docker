@@ -68,7 +68,7 @@ module ChefMetalDocker
       provisioner_options = node['normal']['provisioner_options']
       provisioner_output = node['normal']['provisioner_output'] || {
         'provisioner_url' => "docker:", # TODO put in the Docker API endpoint
-        'repository_name' => node['name'], # TODO disambiguate with chef_server_url/path!
+        'repository_name' => "#{node['name']}_image", # TODO disambiguate with chef_server_url/path!
         'container_name' => node['name'] # TODO disambiguate with chef_server_url/path!
       }
 
@@ -80,7 +80,7 @@ module ChefMetalDocker
       # We will start up after we converge!
       base_image = Docker::Image.get(base_image_name)
       begin
-        repository_image = Docker::Image.get("#{container_name}:latest")
+        repository_image = Docker::Image.get("#{container_name}_image:latest")
         # If the current image does NOT have the base_image as an ancestor,
         # we are going to have to re-tag it and rebuild.
         if repository_image.history.any? { |entry| entry['Id'] == base_image.id }
@@ -92,8 +92,8 @@ module ChefMetalDocker
         tag_base_image = true
       end
       if tag_base_image
-        action_handler.perform_action "Tag base image #{base_image_name} as #{container_name}" do
-          base_image.tag('repo' => container_name, 'force' => true)
+        action_handler.perform_action "Tag base image #{base_image_name} as #{container_name}_image" do
+          base_image.tag('repo' => "#{container_name}_image", 'force' => true)
         end
       end
 
@@ -203,7 +203,7 @@ module ChefMetalDocker
 
     def transport_for(node)
       provisioner_output = node['normal']['provisioner_output']
-      ChefMetalDocker::DockerTransport.new(provisioner_output['container_name'], provisioner_output['repository_name'], credentials, connection)
+      ChefMetalDocker::DockerTransport.new(provisioner_output['repository_name'], provisioner_output['container_name'], credentials, connection)
     end
   end
 end
