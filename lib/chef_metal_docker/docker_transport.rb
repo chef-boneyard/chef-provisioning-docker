@@ -70,7 +70,7 @@ module ChefMetalDocker
       end
 
       Chef::Log.debug("Execute complete: status #{exit_status['StatusCode']}")
-      DockerResult.new(stdout, stderr, exit_status['StatusCode'])
+      DockerResult.new(command, options, stdout, stderr, exit_status['StatusCode'])
     end
 
     def read_file(path)
@@ -184,18 +184,26 @@ module ChefMetalDocker
     end
 
     class DockerResult
-      def initialize(stdout, stderr, exitstatus)
+      def initialize(command, options, stdout, stderr, exitstatus)
+        @command = command
+        @options = options
         @stdout = stdout
         @stderr = stderr
         @exitstatus = exitstatus
       end
 
+      attr_reader :command
+      attr_reader :options
       attr_reader :stdout
       attr_reader :stderr
       attr_reader :exitstatus
 
       def error!
-        raise "Error: code #{exitstatus}.\nSTDOUT:#{stdout}\nSTDERR:#{stderr}" if exitstatus != 0
+        if exitstatus != 0
+          msg = "Error: command '#{command}' exited with code #{exitstatus}.\n"
+          msg << "STDOUT: #{stdout}" if !options[:stream] && !options[:stream_stdout]
+          msg << "STDERR: #{stderr}" if !options[:stream] && !options[:stream_stderr]
+        end
       end
     end
   end
