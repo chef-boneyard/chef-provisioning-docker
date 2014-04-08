@@ -43,6 +43,10 @@ module ChefMetalDocker
       # Start the container
       @container.start
 
+
+      Chef::Log.debug("Setting timeout to 15 minutes")
+      Docker.options[:read_timeout] = (15 * 60)
+
       Chef::Log.debug("Attaching to #{container_name}")
       # Capture stdout / stderr
       stdout = ''
@@ -59,6 +63,9 @@ module ChefMetalDocker
           raise "unexpected message type #{type}"
         end
       end
+
+      Chef::Log.debug("Removing temporary read timeout")
+      Docker.options.delete(:read_timeout)
 
       Chef::Log.debug("Grabbing exit status from #{container_name}")
       # Capture exit code
