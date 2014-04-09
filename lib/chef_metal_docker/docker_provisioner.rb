@@ -72,6 +72,7 @@ module ChefMetalDocker
         'container_name' => node['name'] # TODO disambiguate with chef_server_url/path!
       }
 
+      repository_name = provisioner_output['repository_name']
       container_name = provisioner_output['container_name']
       base_image_name = provisioner_options['base_image']
       raise "base_image not specified in provisioner options!" if !base_image_name
@@ -80,7 +81,7 @@ module ChefMetalDocker
       # We will start up after we converge!
       base_image = Docker::Image.get(base_image_name)
       begin
-        repository_image = Docker::Image.get("#{container_name}_image:latest")
+        repository_image = Docker::Image.get("#{repository_name}:latest")
         # If the current image does NOT have the base_image as an ancestor,
         # we are going to have to re-tag it and rebuild.
         if repository_image.history.any? { |entry| entry['Id'] == base_image.id }
@@ -92,8 +93,8 @@ module ChefMetalDocker
         tag_base_image = true
       end
       if tag_base_image
-        action_handler.perform_action "Tag base image #{base_image_name} as #{container_name}_image" do
-          base_image.tag('repo' => "#{container_name}_image", 'force' => true)
+        action_handler.perform_action "Tag base image #{base_image_name} as #{repository_name}" do
+          base_image.tag('repo' => repository_name, 'force' => true)
         end
       end
 
@@ -109,7 +110,7 @@ module ChefMetalDocker
 
     def delete_machine(action_handler, node)
       if node['normal'] && node['normal']['provisioner_output']
-        container_name = node['normal']['provisioner_output'][:container_name]
+        container_name = node['normal']['provisioner_output']['container_name']
         ChefMetal.inline_resource(action_handler) do
           docker_container container_name do
             action [:kill, :remove]
@@ -121,7 +122,7 @@ module ChefMetalDocker
 
     def stop_machine(action_handler, node)
       if node['normal'] && node['normal']['provisioner_output']
-        container_name = node['normal']['provisioner_output'][:container_name]
+        container_name = node['normal']['provisioner_output']['container_name']
         ChefMetal.inline_resource(action_handler) do
           docker_container container_name do
             action [:stop]
@@ -133,7 +134,7 @@ module ChefMetalDocker
     # This is docker-only, not Metal, at the moment.
     # TODO this should be metal.  Find a nice interface.
     def snapshot(action_handler, node, name=nil)
-      container_name = node['normal']['provisioner_output'][:container_name]
+      container_name = node['normal']['provisioner_output']['container_name']
       ChefMetal.inline_resource(action_handler) do
         docker_container container_name do
           action [:commit]
@@ -144,7 +145,7 @@ module ChefMetalDocker
     # Output Docker tar format image
     # TODO this should be metal.  Find a nice interface.
     def save_repository(action_handler, node, path)
-      container_name = node['normal']['provisioner_output'][:container_name]
+      container_name = node['normal']['provisioner_output']['container_name']
       ChefMetal.inline_resource(action_handler) do
         docker_container container_name do
           action [:export]
@@ -203,7 +204,11 @@ module ChefMetalDocker
 
     def transport_for(node)
       provisioner_output = node['normal']['provisioner_output']
-      ChefMetalDocker::DockerTransport.new(provisioner_output['repository_name'], provisioner_output['container_name'], credentials, connection)
+      ChefMetalDocker::DockerTransport.new(
+        provisioner_output['repository_name'],
+        provisioner_output['container_name'],
+        credentials,
+        connection)
     end
   end
 end

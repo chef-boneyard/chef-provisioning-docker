@@ -14,8 +14,8 @@ module ChefMetalDocker
     end
 
     attr_reader :real_convergence_strategy
-    attr_reader :container_name
     attr_reader :repository_name
+    attr_reader :container_name
     attr_reader :container_configuration
     attr_reader :host_configuration
     attr_reader :credentials
@@ -30,7 +30,6 @@ module ChefMetalDocker
 
       # After converge, we bring up the container command
       if container_configuration
-
         begin
           container = Docker::Container.get(container_name)
           action_handler.perform_action "Delete existing container" do
