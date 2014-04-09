@@ -24,9 +24,16 @@ module ChefMetalDocker
     def execute(command, options={})
       Chef::Log.debug("execute '#{command}' with options #{options}")
       begin
+        connection.post("/containers/#{container_name}/stop?t=0", '')
+        Chef::Log.debug("stopped /containers/#{container_name}")
+      rescue Docker::Error::NotFoundError
+      end
+
+      begin
         # Delete the container if it exists and is dormant
         connection.delete("/containers/#{container_name}")
         Chef::Log.debug("deleted /containers/#{container_name}")
+      rescue Docker::Error::ServerError
       rescue Docker::Error::NotFoundError
       end
       Chef::Log.debug("Creating #{container_name} from #{repository_name}:latest")
@@ -70,7 +77,7 @@ module ChefMetalDocker
 
           Chef::Log.debug("Grabbing exit status from #{container_name}")
           # Capture exit code
-          exit_status = @container.wait
+          exit_status = @container.wait(15*60)
           attach_thread.join
 
           unless options[:read_only]
