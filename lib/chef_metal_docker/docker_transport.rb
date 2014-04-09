@@ -9,8 +9,8 @@ module ChefMetalDocker
   class DockerTransport < ChefMetal::Transport
     def initialize(repository_name, container_name, credentials, connection)
       @repository_name = repository_name
-      @image = Docker::Image.get("#{repository_name}:latest", connection)
       @container_name = container_name
+      @image = Docker::Image.get("#{repository_name}:latest", connection)
       @credentials = credentials
       @connection = connection
     end
@@ -39,45 +39,54 @@ module ChefMetalDocker
         'TTY' => false
       }, connection)
 
-      Chef::Log.debug("Starting #{container_name}")
-      # Start the container
-      @container.start
-
-
       Chef::Log.debug("Setting timeout to 15 minutes")
       Docker.options[:read_timeout] = (15 * 60)
+      begin
 
-      Chef::Log.debug("Attaching to #{container_name}")
-      # Capture stdout / stderr
-      stdout = ''
-      stderr = ''
-      @container.attach do |type, str|
-        case type
-        when :stdout
-          stdout << str
-          stream_chunk(options, stdout, nil)
-        when :stderr
-          stderr << str
-          stream_chunk(options, nil, stderr)
-        else
-          raise "unexpected message type #{type}"
+        stdout = ''
+        stderr = ''
+
+        attach_thread = Thread.new do
+          Chef::Log.debug("Attaching to #{container_name}")
+          # Capture stdout / stderr
+          @container.attach do |type, str|
+            case type
+            when :stdout
+              stdout << str
+              stream_chunk(options, stdout, nil)
+            when :stderr
+              stderr << str
+              stream_chunk(options, nil, stderr)
+            else
+              raise "unexpected message type #{type}"
+            end
+          end
         end
+
+        begin
+          Chef::Log.debug("Starting #{container_name}")
+          # Start the container
+          @container.start
+
+          Chef::Log.debug("Grabbing exit status from #{container_name}")
+          # Capture exit code
+          exit_status = @container.wait
+          attach_thread.join
+
+          unless options[:read_only]
+            Chef::Log.debug("Committing #{container_name} as #{repository_name}")
+            @image = @container.commit('repo' => repository_name)
+          end
+
+          Chef::Log.debug("Execute complete: status #{exit_status['StatusCode']}")
+          DockerResult.new(command, options, stdout, stderr, exit_status['StatusCode'])
+        ensure
+          Thread.kill(attach_thread) if attach_thread.alive?
+        end
+      ensure
+        Chef::Log.debug("Removing temporary read timeout")
+        Docker.options.delete(:read_timeout)
       end
-
-      Chef::Log.debug("Removing temporary read timeout")
-      Docker.options.delete(:read_timeout)
-
-      Chef::Log.debug("Grabbing exit status from #{container_name}")
-      # Capture exit code
-      exit_status = @container.wait
-
-      unless options[:read_only]
-        Chef::Log.debug("Committing #{container_name} as #{repository_name}")
-        @image = @container.commit('repo' => repository_name)
-      end
-
-      Chef::Log.debug("Execute complete: status #{exit_status['StatusCode']}")
-      DockerResult.new(command, options, stdout, stderr, exit_status['StatusCode'])
     end
 
     def read_file(path)
