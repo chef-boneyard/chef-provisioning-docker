@@ -172,34 +172,32 @@ module ChefMetalDocker
     end
 
     def convergence_strategy_for(node)
-      @convergence_strategy ||= begin
-        provisioner_output = node['normal']['provisioner_output']
-        provisioner_options = node['normal']['provisioner_options']
-        strategy = case provisioner_options['convergence_strategy']
-          when :no_converge
-            ChefMetal::ConvergenceStrategy::NoConverge.new
-          else
-            ChefMetal::ConvergenceStrategy::InstallCached.new
-          end
-        container_configuration = provisioner_options['container_configuration'] || {}
-        if provisioner_options['command']
-          command = provisioner_options['command']
-          command = command.split(/\s+/) if command.is_a?(String)
-          container_configuration['Cmd'] = command
-        elsif provisioner_options['command'] == false
-          container_configuration = nil
+      provisioner_output = node['normal']['provisioner_output']
+      provisioner_options = node['normal']['provisioner_options']
+      strategy = case provisioner_options['convergence_strategy']
+        when :no_converge
+          ChefMetal::ConvergenceStrategy::NoConverge.new
         else
-          # TODO how do we get things started?  runit?  cron?  wassup here.
-          container_configuration['Cmd'] = %w(while 1; sleep 1000; end)
+          ChefMetal::ConvergenceStrategy::InstallCached.new
         end
-        ChefMetalDocker::DockerConvergenceStrategy.new(strategy,
-          provisioner_output['repository_name'],
-          provisioner_output['container_name'],
-          container_configuration,
-          provisioner_options['host_configuration'] || {},
-          credentials,
-          connection)
+      container_configuration = provisioner_options['container_configuration'] || {}
+      if provisioner_options['command']
+        command = provisioner_options['command']
+        command = command.split(/\s+/) if command.is_a?(String)
+        container_configuration['Cmd'] = command
+      elsif provisioner_options['command'] == false
+        container_configuration = nil
+      else
+        # TODO how do we get things started?  runit?  cron?  wassup here.
+        container_configuration['Cmd'] = %w(while 1; sleep 1000; end)
       end
+      ChefMetalDocker::DockerConvergenceStrategy.new(strategy,
+        provisioner_output['repository_name'],
+        provisioner_output['container_name'],
+        container_configuration,
+        provisioner_options['host_configuration'] || {},
+        credentials,
+        connection)
     end
 
     def transport_for(node)
