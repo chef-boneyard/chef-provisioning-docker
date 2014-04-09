@@ -91,6 +91,12 @@ module ChefMetalDocker
         container.copy(path) do |block|
           tarfile << block
         end
+      rescue Docker::Error::ServerError
+        if $!.message =~ /500/
+          return nil
+        else
+          raise
+        end
       ensure
         container.delete
       end
