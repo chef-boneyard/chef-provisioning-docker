@@ -76,7 +76,7 @@ module ChefMetalDocker
 
           Chef::Log.debug("Grabbing exit status from #{container_name}")
           # Capture exit code
-          exit_status = @container.wait
+          exit_status = @container.wait(15 * 60)
           attach_thread.join
 
           unless options[:read_only]
