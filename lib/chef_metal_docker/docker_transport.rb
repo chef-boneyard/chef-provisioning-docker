@@ -22,7 +22,7 @@ module ChefMetalDocker
     attr_reader :connection
 
     def execute(command, options={})
-      Chef::Log.info("execute '#{command}' with options #{options}")
+      Chef::Log.debug("execute '#{command}' with options #{options}")
       begin
         # Delete the container if it exists and is dormant
         connection.delete("/containers/#{container_name}?v=true&force=true")
@@ -36,13 +36,7 @@ module ChefMetalDocker
         'Cmd' => (command.is_a?(String) ? Shellwords.shellsplit(command) : command),
         'AttachStdout' => true,
         'AttachStderr' => true,
-        'TTY' => false,
-        'Volumes' => {
-          '/var/chef/cache/cookbooks' => '/var/www/cache/cookbooks'
-        },
-        'VolumesRW' => {
-          '/var/chef/cache/cookbooks' => true
-        }
+        'TTY' => false
       }, connection)
 
       Chef::Log.debug("Setting timeout to 15 minutes")
@@ -76,7 +70,7 @@ module ChefMetalDocker
 
           Chef::Log.debug("Grabbing exit status from #{container_name}")
           # Capture exit code
-          exit_status = @container.wait(15 * 60)
+          exit_status = @container.wait(20 * 60)
           attach_thread.join
 
           unless options[:read_only]
