@@ -22,7 +22,7 @@ module ChefMetalDocker
     attr_reader :connection
 
     def execute(command, options={})
-      Chef::Log.debug("execute '#{command}' with options #{options}")
+      Chef::Log.info("execute '#{command}' with options #{options}")
       begin
         # Delete the container if it exists and is dormant
         connection.delete("/containers/#{container_name}?v=true&force=true")
