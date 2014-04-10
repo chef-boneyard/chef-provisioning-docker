@@ -38,16 +38,10 @@ module ChefMetalDocker
         rescue Docker::Error::NotFoundError
         end
         action_handler.perform_action "Create new container and run container_configuration['Cmd']" do
-          details = {
+          container = Docker::Container.create({
             'name' => container_name,
             'Image' => "#{repository_name}:latest"
-          }.merge(container_configuration)
-
-          container = Docker::Container.create(details, connection)
-#          container = Docker::Container.create({
-#            'name' => container_name,
-#            'Image' => "#{repository_name}:latest"
-#          }.merge(container_configuration), connection)
+          }.merge(container_configuration), connection)
           container.start!(host_configuration)
         end
         # We don't bother waiting ... our only job is to bring it up.

@@ -25,7 +25,7 @@ module ChefMetalDocker
       Chef::Log.debug("execute '#{command}' with options #{options}")
       begin
         # Delete the container if it exists and is dormant
-        connection.delete("/containers/#{container_name}")
+        connection.delete("/containers/#{container_name}?v=true&force=true")
         Chef::Log.debug("deleted /containers/#{container_name}")
       rescue Docker::Error::NotFoundError
       end
