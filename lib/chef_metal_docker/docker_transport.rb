@@ -36,7 +36,13 @@ module ChefMetalDocker
         'Cmd' => (command.is_a?(String) ? Shellwords.shellsplit(command) : command),
         'AttachStdout' => true,
         'AttachStderr' => true,
-        'TTY' => false
+        'TTY' => false,
+        'Volumes' => {
+          '/var/chef/cache/cookbooks' => '/var/www/cache/cookbooks'
+        },
+        'VolumesRW' => {
+          '/var/chef/cache/cookbooks' => true
+        }
       }, connection)
 
       Chef::Log.debug("Setting timeout to 15 minutes")
