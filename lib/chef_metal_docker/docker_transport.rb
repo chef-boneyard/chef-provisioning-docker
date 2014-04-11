@@ -39,6 +39,8 @@ module ChefMetalDocker
         'TTY' => false
       }, connection)
 
+      Chef::Log.debug("Setting timeout to 15 minutes")
+      Docker.options[:read_timeout] = (15 * 60)
       begin
 
         stdout = ''
@@ -50,7 +52,7 @@ module ChefMetalDocker
 
           Chef::Log.debug("Attaching to #{container_name}")
           # Capture stdout / stderr
-          attach_with_timeout(@container, {}, (120*60)) do |type, str|
+          @container.attach do |type, str|
             case type
             when :stdout
               stdout << str
@@ -88,6 +90,8 @@ module ChefMetalDocker
           Thread.kill(attach_thread) if attach_thread.alive?
         end
       ensure
+        Chef::Log.debug("Removing temporary read timeout")
+        Docker.options.delete(:read_timeout)
       end
     end
 
