@@ -25,8 +25,8 @@ module ChefMetalDocker
       real_convergence_strategy.setup_convergence(action_handler, machine, machine_resource)
     end
 
-    def converge(action_handler, machine)
-      real_convergence_strategy.converge(action_handler, machine)
+    def converge(action_handler, machine, chef_server)
+      real_convergence_strategy.converge(action_handler, machine, chef_server)
 
       # After converge, we bring up the container command
       if container_configuration

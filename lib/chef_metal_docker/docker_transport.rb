@@ -24,6 +24,11 @@ module ChefMetalDocker
     def execute(command, options={})
       Chef::Log.debug("execute '#{command}' with options #{options}")
       begin
+        connection.post("/containers/#{container_name}/stop?t=0", '')
+        Chef::Log.debug("stopped /containers/#{container_name}")
+      rescue Docker::Error::NotFoundError
+      end
+      begin
         # Delete the container if it exists and is dormant
         connection.delete("/containers/#{container_name}?v=true&force=true")
         Chef::Log.debug("deleted /containers/#{container_name}")
@@ -39,10 +44,10 @@ module ChefMetalDocker
         'TTY' => false
       }, connection)
 
-      Chef::Log.debug("Setting timeout to 15 minutes")
-      Docker.options[:read_timeout] = (15 * 60)
+      read_timeout = execute_timeout(options)
+      read_timeout = nil if read_timeout == 0
+      Docker.options[:read_timeout] = read_timeout
       begin
-
         stdout = ''
         stderr = ''
 
@@ -76,7 +81,7 @@ module ChefMetalDocker
 
           Chef::Log.debug("Grabbing exit status from #{container_name}")
           # Capture exit code
-          exit_status = @container.wait(20 * 60)
+          exit_status = @container.wait(read_timeout)
           attach_thread.join
 
           unless options[:read_only]

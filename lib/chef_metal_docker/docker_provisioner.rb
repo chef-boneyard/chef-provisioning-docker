@@ -175,10 +175,13 @@ module ChefMetalDocker
       provisioner_output = node['normal']['provisioner_output']
       provisioner_options = node['normal']['provisioner_options']
       strategy = case provisioner_options['convergence_strategy']
-        when :no_converge
+        when 'no_converge'
           ChefMetal::ConvergenceStrategy::NoConverge.new
         else
-          ChefMetal::ConvergenceStrategy::InstallCached.new
+          options = {}
+          provisioner_options = node['normal']['provisioner_options'] || {}
+          options[:chef_client_timeout] = provisioner_options['chef_client_timeout'] if provisioner_options.has_key?('chef_client_timeout')
+          ChefMetal::ConvergenceStrategy::InstallCached.new(options)
         end
       container_configuration = provisioner_options['container_configuration'] || {}
       if provisioner_options['command']
