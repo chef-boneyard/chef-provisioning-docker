@@ -50,7 +50,7 @@ module ChefMetalDocker
 
           Chef::Log.debug("Attaching to #{container_name}")
           # Capture stdout / stderr
-          @container.attach do |type, str|
+          attach_with_timeout(@container, {}, (120*60)) do |type, str|
             case type
             when :stdout
               stdout << str
