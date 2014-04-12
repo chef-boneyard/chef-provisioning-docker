@@ -4,6 +4,8 @@ require 'archive/tar/minitar'
 require 'shellwords'
 require 'uri'
 require 'socket'
+require 'em-proxy'
+require 'mixlib/shellout'
 
 module ChefMetalDocker
   class DockerTransport < ChefMetal::Transport
@@ -14,6 +16,8 @@ module ChefMetalDocker
       @credentials = credentials
       @connection = connection
     end
+
+    include Chef::Mixin::ShellOut
 
     attr_reader :container_name
     attr_reader :repository_name
@@ -34,70 +38,26 @@ module ChefMetalDocker
         Chef::Log.debug("deleted /containers/#{container_name}")
       rescue Docker::Error::NotFoundError
       end
-      Chef::Log.debug("Creating #{container_name} from #{repository_name}:latest")
-      @container = Docker::Container.create({
-        'name' => container_name,
-        'Image' => "#{repository_name}:latest",
-        'Cmd' => (command.is_a?(String) ? Shellwords.shellsplit(command) : command),
-        'AttachStdout' => true,
-        'AttachStderr' => true,
-        'TTY' => false
-      }, connection)
 
-      read_timeout = execute_timeout(options)
-      read_timeout = nil if read_timeout == 0
-      Docker.options[:read_timeout] = read_timeout
-      begin
-        stdout = ''
-        stderr = ''
+      command = Shellwords.split(command) if command.is_a?(String)
 
-        attach_thread = Thread.new do
-          Chef::Log.debug("Setting timeout to 15 minutes")
-          Docker.options[:read_timeout] = (15 * 60)
+      # TODO shell_out has no way to live stream stderr???
+      live_stream = nil
+      live_stream = STDOUT if options[:stream]
+      live_stream = options[:stream_stdout] if options[:stream_stdout]
+      cmd = Mixlib::ShellOut.new(Shellwords.join(['docker', 'run', '--name', container_name, "#{repository_name}:latest" ] + command),
+        :live_stream => live_stream, :timeout => execute_timeout(options))
+      cmd.run_command
 
-          Chef::Log.debug("Attaching to #{container_name}")
-          # Capture stdout / stderr
-          @container.attach do |type, str|
-            case type
-            when :stdout
-              stdout << str
-              stream_chunk(options, stdout, nil)
-            when :stderr
-              stderr << str
-              stream_chunk(options, nil, stderr)
-            else
-              raise "unexpected message type #{type}"
-            end
-          end
 
-          Chef::Log.debug("Removing temporary read timeout")
-          Docker.options.delete(:read_timeout)
-        end
-
-        begin
-          Chef::Log.debug("Starting #{container_name}")
-          # Start the container
-          @container.start
-
-          Chef::Log.debug("Grabbing exit status from #{container_name}")
-          # Capture exit code
-          exit_status = @container.wait(read_timeout)
-          attach_thread.join
-
-          unless options[:read_only]
-            Chef::Log.debug("Committing #{container_name} as #{repository_name}")
-            @image = @container.commit('repo' => repository_name)
-          end
-
-          Chef::Log.debug("Execute complete: status #{exit_status['StatusCode']}")
-          DockerResult.new(command, options, stdout, stderr, exit_status['StatusCode'])
-        ensure
-          Thread.kill(attach_thread) if attach_thread.alive?
-        end
-      ensure
-        Chef::Log.debug("Removing temporary read timeout")
-        Docker.options.delete(:read_timeout)
+      unless options[:read_only]
+        Chef::Log.debug("Committing #{container_name} as #{repository_name}")
+        container = Docker::Container.get(container_name)
+        @image = container.commit('repo' => repository_name)
       end
+
+      Chef::Log.debug("Execute complete: status #{cmd.exitstatus}")
+      cmd
     end
 
     def read_file(path)
@@ -162,10 +122,20 @@ module ChefMetalDocker
       # The host is already open to the container.  Just find out its address and return it!
       uri = URI(url)
       host = Socket.getaddrinfo(uri.host, uri.scheme, nil, :STREAM)[0][3]
-      if host == '127.0.0.1'
+      if host == '127.0.0.1' || host == '[::1]'
         result = execute('ip route ls', :read_only => true)
         if result.stdout =~ /default via (\S+)/
           uri.host = $1
+
+          if !@proxy_thread
+            # Listen to docker instances only, and forward to localhost
+            @proxy_thread = Thread.new do
+              Proxy.start(:host => uri.host, :port => uri.port, :debug => true) do |conn|
+                conn.server :srv, :host => host, :port => uri.port
+              end
+            end
+          end
+
           return uri.to_s
         else
           raise "Cannot forward port: ip route ls did not show default in expected format.\nSTDOUT: #{result.stdout}"
@@ -175,6 +145,7 @@ module ChefMetalDocker
     end
 
     def disconnect
+      @proxy_thread.kill if @proxy_thread
     end
 
     def available?
@@ -182,20 +153,83 @@ module ChefMetalDocker
 
     private
 
-    # Copy of container.attach with timeout support
-    def attach_with_timeout(container, options = {}, read_timeout, &block)
+    def old_execute
+      Chef::Log.debug("Creating #{container_name} from #{repository_name}:latest")
+      @container = Docker::Container.create({
+        'name' => container_name,
+        'Image' => "#{repository_name}:latest",
+        'Cmd' => (command.is_a?(String) ? Shellwords.shellsplit(command) : command),
+        'AttachStdout' => true,
+        'AttachStderr' => true,
+        'TTY' => false
+      }, connection)
+
+      Docker.options[:read_timeout] = read_timeout
+      begin
+        stdout = ''
+        stderr = ''
+
+        Chef::Log.debug("Attaching to #{container_name}")
+        # Capture stdout / stderr
+        excon, attach_datum = attach_with_timeout(@container, read_timeout) do |type, str|
+          puts "got something"
+          case type
+          when :stdout
+            stdout << str
+            stream_chunk(options, stdout, nil)
+          when :stderr
+            stderr << str
+            stream_chunk(options, nil, stderr)
+          else
+            raise "unexpected message type #{type}"
+          end
+        end
+
+        begin
+          Chef::Log.debug("Starting #{container_name}")
+          # Start the container
+          @container.start
+
+          Chef::Log.debug("Grabbing exit status from #{container_name}")
+          # Capture exit code
+          exit_status = @container.wait(read_timeout)
+
+          Chef::Log.debug("Waiting for attach to complete ...")
+          wait_for_attach(excon, attach_datum)
+
+          Chef::Log.debug("Execute complete: status #{exit_status['StatusCode']}")
+          DockerResult.new(command, options, stdout, stderr, exit_status['StatusCode'])
+        rescue
+          # Make sure we close off outstanding connections if we exit the method
+          excon.reset
+          raise
+        end
+      ensure
+        Chef::Log.debug("Removing temporary read timeout")
+        Docker.options.delete(:read_timeout)
+      end
+    end
+
+    # Copy of container.attach with timeout support and pipeline
+    def attach_with_timeout(container, read_timeout, options = {}, &block)
       opts = {
         :stream => true, :stdout => true, :stderr => true
       }.merge(options)
       # Creates list to store stdout and stderr messages
       msgs = Docker::Messages.new
-      connection.post(
+      connection.start_request(
+        :post,
         "/containers/#{container.id}/attach",
         opts,
         :response_block => attach_for(block, msgs),
-        :read_timeout => read_timeout
+        :read_timeout => read_timeout,
+        :pipeline => true,
+        :persistent => true
       )
-      [msgs.stdout_messages, msgs.stderr_messages]
+    end
+
+    def wait_for_attach(excon, datum)
+      Excon::Response.new(excon.send(:response, datum)[:response])
     end
 
     # Method that takes chunks and calls the attached block for each mux'd message
@@ -240,5 +274,28 @@ module ChefMetalDocker
         end
       end
     end
+  end
+end
+
+class Docker::Connection
+  def start_request(method, *args, &block)
+    request = compile_request_params(method, *args, &block)
+    if Docker.logger
+      Docker.logger.debug(
+        [request[:method], request[:path], request[:query], request[:body]]
+      )
+    end
+    excon = resource
+    [ excon, excon.request(request) ]
+  rescue Excon::Errors::BadRequest => ex
+    raise ClientError, ex.message
+  rescue Excon::Errors::Unauthorized => ex
+    raise UnauthorizedError, ex.message
+  rescue Excon::Errors::NotFound => ex
+    raise NotFoundError, ex.message
+  rescue Excon::Errors::InternalServerError => ex
+    raise ServerError, ex.message
+  rescue Excon::Errors::Timeout => ex
+    raise TimeoutError, ex.message
   end
 end
