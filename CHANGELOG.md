@@ -1,5 +1,9 @@
 = Changelog
 
+== 0.2 (4/13/2014)
+
+- Add container-create-only mode to provisioner
+
 == 0.1.1 (4/11/2014)
 
 - Increase stability of transport.execute()
