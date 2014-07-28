@@ -1,12 +1,6 @@
 require 'chef/resource/lwrp_base'
 
-class Chef::Resource::DockerContainer < Chef::Resource::LWRPBase
-
-  self.resource_name = 'docker_container'
-  
-  actions :commit, :cp, :export, :kill, :redeploy, :remove, :restart, :run, :start, :stop, :wait
-
-  default_action :run
+class Chef::Resource::DockerContainer < Chef::Resource::Machine
 
   attribute :image, :name_attribute => true
   attribute :attach, :kind_of => [TrueClass, FalseClass]
