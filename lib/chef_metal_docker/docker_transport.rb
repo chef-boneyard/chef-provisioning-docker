@@ -180,7 +180,6 @@ module ChefMetalDocker
       Sys::ProcTable.ps do |proc|
         if proc.respond_to?(:cmdline)
           if proc.send(:cmdline).to_s =~ /.*--comment boot2docker.*/
-            puts "Found boot2docker!"
             return true
           end
         end
