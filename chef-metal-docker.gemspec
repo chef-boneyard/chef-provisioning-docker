@@ -16,6 +16,7 @@ Gem::Specification.new do |s|
   s.add_dependency 'chef-metal', '~> 0.9'
   s.add_dependency 'docker-api'
   s.add_dependency 'em-proxy'
+  s.add_dependency 'sys-proctable'
 
   s.add_development_dependency 'rspec'
   s.add_development_dependency 'rake'

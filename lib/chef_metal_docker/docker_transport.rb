@@ -6,15 +6,18 @@ require 'uri'
 require 'socket'
 require 'em-proxy'
 require 'mixlib/shellout'
+require 'sys/proctable'
+require 'chef_metal_docker/chef_zero_http_proxy'
 
 module ChefMetalDocker
   class DockerTransport < ChefMetal::Transport
-    def initialize(repository_name, container_name, credentials, connection)
-      @repository_name = repository_name
+    def initialize(container_name, base_image_name, credentials, connection, tunnel_transport = nil)
+      @repository_name = 'chef'
       @container_name = container_name
-      @image = Docker::Image.get("#{repository_name}:latest", connection)
+      @image = Docker::Image.get(base_image_name, connection)
       @credentials = credentials
       @connection = connection
+      @tunnel_transport = tunnel_transport
     end
 
     include Chef::Mixin::ShellOut
@@ -24,12 +27,16 @@ module ChefMetalDocker
     attr_reader :image
     attr_reader :credentials
     attr_reader :connection
+    attr_reader :tunnel_transport
 
     def execute(command, options={})
       Chef::Log.debug("execute '#{command}' with options #{options}")
+
       begin
         connection.post("/containers/#{container_name}/stop?t=0", '')
         Chef::Log.debug("stopped /containers/#{container_name}")
+      rescue Excon::Errors::NotModified
+        Chef::Log.debug("Already stopped #{container_name}")
       rescue Docker::Error::NotFoundError
       end
       begin
@@ -45,15 +52,17 @@ module ChefMetalDocker
       live_stream = nil
       live_stream = STDOUT if options[:stream]
       live_stream = options[:stream_stdout] if options[:stream_stdout]
-      cmd = Mixlib::ShellOut.new(Shellwords.join(['docker', 'run', '--name', container_name, "#{repository_name}:latest" ] + command),
+      cmd = Mixlib::ShellOut.new(Shellwords.join(['docker', 'run', '--name', container_name, @image.id ] + command),
         :live_stream => live_stream, :timeout => execute_timeout(options))
+
+      Chef::Log.debug("Executing #{cmd}")
       cmd.run_command
 
 
       unless options[:read_only]
-        Chef::Log.debug("Committing #{container_name} as #{repository_name}")
+        Chef::Log.debug("Committing #{container_name} as #{repository_name}:#{container_name}")
         container = Docker::Container.get(container_name)
-        @image = container.commit('repo' => repository_name)
+        @image = container.commit('repo' => repository_name, 'tag' => container_name)
       end
 
       Chef::Log.debug("Execute complete: status #{cmd.exitstatus}")
@@ -62,7 +71,7 @@ module ChefMetalDocker
 
     def read_file(path)
       container = Docker::Container.create({
-        'Image' => "#{repository_name}:latest",
+        'Image' => @image.id,
         'Cmd' => %w(echo true)
       }, connection)
       begin
@@ -99,7 +108,7 @@ module ChefMetalDocker
       Tempfile.open('metal_docker_write_file') do |file|
         file.write(content)
         file.close
-        @image = @image.insert_local('localPath' => file.path, 'outputPath' => path, 't' => "#{repository_name}:latest")
+        @image = @image.insert_local('localPath' => file.path, 'outputPath' => path, 't' => "#{repository_name}:#{container_name}")
       end
     end
 
@@ -115,26 +124,38 @@ module ChefMetalDocker
     end
 
     def upload_file(local_path, path)
-      @image = @image.insert_local('localPath' => local_path, 'outputPath' => path, 't' => "#{repository_name}:latest")
+      @image = @image.insert_local('localPath' => local_path, 'outputPath' => path, 't' => "#{repository_name}:#{container_name}")
     end
 
     def make_url_available_to_remote(url)
       # The host is already open to the container.  Just find out its address and return it!
       uri = URI(url)
       host = Socket.getaddrinfo(uri.host, uri.scheme, nil, :STREAM)[0][3]
+      Chef::Log.debug("Making URL available: #{host}")
+
       if host == '127.0.0.1' || host == '[::1]'
         result = execute('ip route ls', :read_only => true)
+
+        Chef::Log.debug("IP route: #{result.stdout}")
+
         if result.stdout =~ /default via (\S+)/
-          uri.host = $1
+
+          uri.host = if using_boot2docker?
+                       # Intermediate VM does NAT, so local address should be fine here
+                       Chef::Log.debug("Using boot2docker!")
+                       IPSocket.getaddress(Socket.gethostname)
+                     else
+                       $1
+                     end
 
           if !@proxy_thread
             # Listen to docker instances only, and forward to localhost
             @proxy_thread = Thread.new do
-              Proxy.start(:host => uri.host, :port => uri.port, :debug => true) do |conn|
-                conn.server :srv, :host => host, :port => uri.port
-              end
+              Chef::Log.debug("Starting proxy thread: #{uri.host}:#{uri.port} <--> #{host}:#{uri.port}")
+              ChefZeroHttpProxy.new(uri.host, uri.port, host, uri.port).run
             end
           end
+          Chef::Log.debug("Using Chef server URL: #{uri.to_s}")
 
           return uri.to_s
         else
@@ -153,60 +174,15 @@ module ChefMetalDocker
 
     private
 
-    def old_execute
-      Chef::Log.debug("Creating #{container_name} from #{repository_name}:latest")
-      @container = Docker::Container.create({
-        'name' => container_name,
-        'Image' => "#{repository_name}:latest",
-        'Cmd' => (command.is_a?(String) ? Shellwords.shellsplit(command) : command),
-        'AttachStdout' => true,
-        'AttachStderr' => true,
-        'TTY' => false
-      }, connection)
-
-      Docker.options[:read_timeout] = read_timeout
-      begin
-        stdout = ''
-        stderr = ''
-
-        Chef::Log.debug("Attaching to #{container_name}")
-        # Capture stdout / stderr
-        excon, attach_datum = attach_with_timeout(@container, read_timeout) do |type, str|
-          puts "got something"
-          case type
-          when :stdout
-            stdout << str
-            stream_chunk(options, stdout, nil)
-          when :stderr
-            stderr << str
-            stream_chunk(options, nil, stderr)
-          else
-            raise "unexpected message type #{type}"
+    # boot2docker introduces an intermediate VM so we need to use a slightly different
+    # mechanism for getting to the running chef-zero
+    def using_boot2docker?
+      Sys::ProcTable.ps do |proc|
+        if proc.respond_to?(:cmdline)
+          if proc.send(:cmdline).to_s =~ /.*--comment boot2docker.*/
+            return true
           end
         end
-
-        begin
-          Chef::Log.debug("Starting #{container_name}")
-          # Start the container
-          @container.start
-
-          Chef::Log.debug("Grabbing exit status from #{container_name}")
-          # Capture exit code
-          exit_status = @container.wait(read_timeout)
-
-          Chef::Log.debug("Waiting for attach to complete ...")
-          wait_for_attach(excon, attach_datum)
-
-          Chef::Log.debug("Execute complete: status #{exit_status['StatusCode']}")
-          DockerResult.new(command, options, stdout, stderr, exit_status['StatusCode'])
-        rescue
-          # Make sure we close off outstanding connections if we exit the method
-          excon.reset
-          raise
-        end
-      ensure
-        Chef::Log.debug("Removing temporary read timeout")
-        Docker.options.delete(:read_timeout)
       end
     end
 
