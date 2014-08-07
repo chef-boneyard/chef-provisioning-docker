@@ -23,22 +23,49 @@ module ChefMetalDocker
     # docker:<path>
     # canonical URL calls realpath on <path>
     def self.from_url(driver_url, config)
-      Chef::Log.debug("New Docker driver from #{driver_url}")
       DockerDriver.new(driver_url, config)
     end
 
     def initialize(driver_url, config)
       super
-      Chef::Log.debug("Constructed new Docker driver for #{driver_url}")
-      Chef::Log.debug("Constructed new Docker driver for #{config.inspect}")
+      url = DockerDriver.connection_url(driver_url)
+
+      if url
+        # Export this as it's expected
+        # to be set for command-line utilities
+        ENV['DOCKER_HOST'] = url
+        Chef::Log.debug("Setting Docker URL to #{url}")
+        Docker.url = url
+      end
+
       @connection = Docker.connection
     end
 
     def self.canonicalize_url(driver_url, config)
-      Chef::Log.debug("Parsing docker URL: #{driver_url}")
-      scheme, image_name = driver_url.split(':', 2)
-      Chef::Log.debug("Canonical docker URL: docker:#{image_name}")
-      "docker:#{image_name}"
+      url = DockerDriver.connection_url(driver_url)
+      [ "docker:#{url}", config ]
+    end
+
+    # Parse the url from a driver URL, try to clean it up
+    # Returns a proper URL from the driver_url string. Examples include:
+    #   docker:/var/run/docker.sock => unix:///var/run/docker.sock
+    #   docker:192.168.0.1:1234 => tcp://192.168.0.1:1234
+    def self.connection_url(driver_url)
+      scheme, url = driver_url.split(':', 2)
+
+      if url && url.size > 0
+        # Clean up the URL with the protocol if needed (within reason)
+        case url
+        when /^\d+\.\d+\.\d+\.\d+:\d+$/
+          "tcp://#{url}"
+        when /^\//
+          "unix://#{url}"
+        when /^(tcp|unix)/
+          url
+        else
+          "tcp://#{url}"
+        end
+      end
     end
 
 
@@ -53,8 +80,6 @@ module ChefMetalDocker
           'container_name' => container_name,
           'image_id' => machine_options[:image_id]
       }
-      Chef::Log.debug("ALLOCATE: #{machine_spec.inspect}\n\n#{machine_options.inspect}")
-
     end
 
     def ready_machine(action_handler, machine_spec, machine_options)
