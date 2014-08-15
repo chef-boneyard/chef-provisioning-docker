@@ -183,7 +183,7 @@ module ChefMetalDocker
     end
 
     def driver_url
-      'docker'
+      "docker:#{Docker.url}
     end
 
     def start_machine(action_handler, machine_spec, machine_options, base_image_name)
