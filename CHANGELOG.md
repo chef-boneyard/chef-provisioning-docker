@@ -1,5 +1,12 @@
 = Changelog
 
+== 0.3 (8/19/2014)
+
+- Rewritten to support the new driver API
+- Supports remote API endpoints as well as local 
+- Replaced EMProxy with a plain HTTP proxy 
+- Supports machine images
+
 == 0.2 (4/13/2014)
 
 - Add container-create-only mode to provisioner
