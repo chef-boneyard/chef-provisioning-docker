@@ -52,7 +52,7 @@ module ChefMetalDocker
       live_stream = nil
       live_stream = STDOUT if options[:stream]
       live_stream = options[:stream_stdout] if options[:stream_stdout]
-      cmd = Mixlib::ShellOut.new(Shellwords.join(['docker', 'run', '--name', container_name, @image.id ] + command),
+      cmd = Mixlib::ShellOut.new(Shellwords.join(['docker', 'run', '--detach=true', '--name', container_name, @image.id ] + command),
         :live_stream => live_stream, :timeout => execute_timeout(options))
 
       Chef::Log.debug("Executing #{cmd}")
