@@ -18,7 +18,7 @@ module ChefMetalDocker
       super action_handler
       if @command
         Chef::Log.debug("DockerContainerMachine converge complete, executing #{@command} in #{@container_name}")
-        @transport.execute(@command)
+        @transport.execute(@command, :detached => true, :read_only => true)
       end
     end
 
