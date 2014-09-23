@@ -1,5 +1,13 @@
 = Changelog
 
+== 0.4.2 (9/23/2014)
+
+- Bug fixes
+- Run final command in detached mode
+- Removed DockerContainer so that it didn't conflict with the docker cookbook
+- Properly use URLs in driver key
+
+
 == 0.3 (8/19/2014)
 
 - Rewritten to support the new driver API
