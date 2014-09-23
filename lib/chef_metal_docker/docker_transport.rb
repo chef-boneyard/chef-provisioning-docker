@@ -52,11 +52,6 @@ module ChefMetalDocker
       live_stream = nil
       live_stream = STDOUT if options[:stream]
       live_stream = options[:stream_stdout] if options[:stream_stdout]
-      detached = if options[:detached]
-                    "--detach=true"
-                 else 
-                    ""
-                 end
 
       args = ['docker', 'run', '--name', container_name]
       if options[:detached] 
