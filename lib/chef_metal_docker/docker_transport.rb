@@ -4,7 +4,6 @@ require 'archive/tar/minitar'
 require 'shellwords'
 require 'uri'
 require 'socket'
-require 'em-proxy'
 require 'mixlib/shellout'
 require 'sys/proctable'
 require 'chef_metal_docker/chef_zero_http_proxy'
@@ -29,6 +28,11 @@ module ChefMetalDocker
     attr_reader :connection
     attr_reader :tunnel_transport
 
+    # Execute the specified command inside the container, returns a Mixlib::Shellout object
+    # Options contains the optional keys:
+    #   :read_only => Do not commit this execute operation, just execute it
+    #   :ports => ports to listen on (-p command-line options)
+    #   :detached => true/false, execute this command in detached mode (for final program to run)
     def execute(command, options={})
       Chef::Log.debug("execute '#{command}' with options #{options}")
 
@@ -39,6 +43,7 @@ module ChefMetalDocker
         Chef::Log.debug("Already stopped #{container_name}")
       rescue Docker::Error::NotFoundError
       end
+
       begin
         # Delete the container if it exists and is dormant
         connection.delete("/containers/#{container_name}?v=true&force=true")
@@ -54,18 +59,32 @@ module ChefMetalDocker
       live_stream = options[:stream_stdout] if options[:stream_stdout]
 
       args = ['docker', 'run', '--name', container_name]
-      if options[:detached] 
+
+      if options[:detached]
         args << '--detach'
       end
+
+      if options[:ports]
+        options[:ports].each do |portnum|
+          args << '-p'
+          args << "#{portnum}:#{portnum}"
+        end
+      end
+
       args << @image.id
       args += command
-      cmdstr = Shellwords.join(args) 
+
+      cmdstr = Shellwords.join(args)
       Chef::Log.debug("Executing #{cmdstr}")
+
+      # Remove this when https://github.com/opscode/chef/pull/2100 gets merged and released
+      # nullify live_stream because at the moment EventsOutputStream doesn't understand <<, which
+      # ShellOut uses
+      live_stream = nil unless live_stream.respond_to? :<<
 
       cmd = Mixlib::ShellOut.new(cmdstr, :live_stream => live_stream, :timeout => execute_timeout(options))
 
       cmd.run_command
-
 
       unless options[:read_only]
         Chef::Log.debug("Committing #{container_name} as #{repository_name}:#{container_name}")
@@ -74,6 +93,7 @@ module ChefMetalDocker
       end
 
       Chef::Log.debug("Execute complete: status #{cmd.exitstatus}")
+
       cmd
     end
 
@@ -210,10 +230,6 @@ module ChefMetalDocker
         :pipeline => true,
         :persistent => true
       )
-    end
-
-    def wait_for_attach(excon, datum)
-      Excon::Response.new(excon.send(:response, datum)[:response])
     end
 
     # Method that takes chunks and calls the attached block for each mux'd message

@@ -223,7 +223,8 @@ module ChefMetalDocker
           machine_spec,
           transport,
           convergence_strategy,
-          docker_options[:command]
+          :command => docker_options[:command],
+          :ports => [].push(docker_options[:ports]).flatten
         )
     end
 
