@@ -18,7 +18,7 @@ Using this driver, you can then define a machine similar to the following exampl
 require 'chef_metal_docker'
 
 machine 'wario' do
-    recipe 'apache'
+    recipe 'openssh::default'
     
     machine_options :docker_options => {
       :base_image => {
@@ -26,7 +26,8 @@ machine 'wario' do
           :repository => 'ubuntu',
           :tag => '14.04'
       },
-      :command => '/usr/sbin/httpd'
+      :command => '/usr/sbin/sshd -p 8022 -D',
+      :ports => 8022
     }
 end
 ```
