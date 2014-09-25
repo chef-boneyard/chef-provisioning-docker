@@ -224,7 +224,8 @@ module ChefMetalDocker
           transport,
           convergence_strategy,
           :command => docker_options[:command],
-          :ports => [].push(docker_options[:ports]).flatten
+          :ports => [].push(docker_options[:ports]).flatten,
+          :keep_stdin_open => docker_options[:keep_stdin_open]
         )
     end
 

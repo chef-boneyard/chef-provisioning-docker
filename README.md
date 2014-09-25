@@ -28,6 +28,9 @@ machine 'wario' do
       },
       :command => '/usr/sbin/sshd -p 8022 -D',
       :ports => 8022
+      # if you need to keep stdin open (i.e docker run -i)
+      # :keep_stdin_open => true
+
     }
 end
 ```

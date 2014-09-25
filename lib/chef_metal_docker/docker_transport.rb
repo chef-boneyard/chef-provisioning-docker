@@ -71,6 +71,10 @@ module ChefMetalDocker
         end
       end
 
+      if options[:keep_stdin_open]
+        args << '-i'
+      end
+
       args << @image.id
       args += command
 

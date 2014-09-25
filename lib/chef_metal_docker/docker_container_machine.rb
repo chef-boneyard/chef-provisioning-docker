@@ -11,6 +11,7 @@ module ChefMetalDocker
       super(machine_spec, transport, convergence_strategy)
       @command = opts[:command]
       @ports = opts[:ports]
+      @keep_stdin_open = opts[:keep_stdin_open]
       @container_name = machine_spec.location['container_name']
       @transport = transport
     end
@@ -23,7 +24,7 @@ module ChefMetalDocker
       super action_handler
       if @command
         Chef::Log.debug("DockerContainerMachine converge complete, executing #{@command} in #{@container_name}")
-        @transport.execute(@command, :detached => true, :read_only => true, :ports => @ports)
+        @transport.execute(@command, :detached => true, :read_only => true, :ports => @ports, :keep_stdin_open => @keep_stdin_open)
       end
     end
 
