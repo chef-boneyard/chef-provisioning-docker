@@ -27,7 +27,7 @@ machine 'wario' do
           :tag => '14.04'
       },
       :command => '/usr/sbin/sshd -p 8022 -D',
-      :ports => 8022
+      :ports => 8022  # also you can use host_port:container_port
       # if you need to keep stdin open (i.e docker run -i)
       # :keep_stdin_open => true
 
