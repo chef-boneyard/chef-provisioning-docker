@@ -26,8 +26,19 @@ machine 'wario' do
           :repository => 'ubuntu',
           :tag => '14.04'
       },
-      :command => '/usr/sbin/sshd -p 8022 -D',
-      :ports => 8022
+      :command => '/usr/sbin/sshd -p 8022 -D',      
+      
+      # Ports can be one of two forms:
+      # src_port (string or integer) is a pass-through, i.e 8022 or "9933"
+      # src:dst (string) is a map from src to dst, i.e "8022:8023" maps 8022 externally to 8023 in the container
+
+      # Example (multiple):
+      :ports => [8022, "8023:9000", "9500"] 
+
+      # Examples (single):
+      :ports => 1234
+      :ports => "2345:6789"
+
       # if you need to keep stdin open (i.e docker run -i)
       # :keep_stdin_open => true
 

@@ -67,7 +67,7 @@ module ChefMetalDocker
       if options[:ports]
         options[:ports].each do |portnum|
           args << '-p'
-          args << "#{portnum}:#{portnum}"
+          args << "#{portnum}"
         end
       end
 
