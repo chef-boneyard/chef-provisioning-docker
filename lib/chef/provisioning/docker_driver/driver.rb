@@ -147,6 +147,7 @@ module DockerDriver
 
     def destroy_machine(action_handler, machine_spec, machine_options)
       container_name = machine_spec.location['container_name']
+
       Chef::Log.debug("Destroying container: #{container_name}")
       container = Docker::Container.get(container_name, @connection)
 
@@ -158,13 +159,23 @@ module DockerDriver
         Chef::Log.debug('Already stopped!')
       end
 
-      Chef::Log.debug("Removing #{container_name}")
-      container.delete
+      begin
+      	Chef::Log.debug("Removing #{container_name}")
+      	container.delete	
+      rescue Docker::Error::ServerError
+        # this is okay
+        Chef::Log.debug('Already Removed!')
+      end
 
-      Chef::Log.debug("Destroying image: chef:#{container_name}")
-      image = Docker::Image.get("chef:#{container_name}")
-      image.delete
-
+      target_repository = 'chef'
+      image = find_image(target_repository, container_name)
+      
+      if image == nil
+         Chef::Log.debug("Image not found!")
+      else
+        Chef::Log.debug("Removing image!")
+        image.delete
+      end
     end
 
     def stop_machine(action_handler, node)
