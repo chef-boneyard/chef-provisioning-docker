@@ -1,4 +1,4 @@
-# chef/provisioning-docker
+# chef-provisioning-docker
 
 How to use:
 
