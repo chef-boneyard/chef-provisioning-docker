@@ -1,4 +1,4 @@
-require 'chef_metal/transport'
+require 'chef/provisioning/transport'
 require 'docker'
 require 'archive/tar/minitar'
 require 'shellwords'
@@ -6,10 +6,12 @@ require 'uri'
 require 'socket'
 require 'mixlib/shellout'
 require 'sys/proctable'
-require 'chef_metal_docker/chef_zero_http_proxy'
+require 'chef/provisioning/docker_driver/chef_zero_http_proxy'
 
-module ChefMetalDocker
-  class DockerTransport < ChefMetal::Transport
+class Chef
+module Provisioning
+module DockerDriver
+  class DockerTransport < Chef::Provisioning::Transport
     def initialize(container_name, base_image_name, credentials, connection, tunnel_transport = nil)
       @repository_name = 'chef'
       @container_name = container_name
@@ -279,6 +281,8 @@ module ChefMetalDocker
       end
     end
   end
+end
+end
 end
 
 class Docker::Connection

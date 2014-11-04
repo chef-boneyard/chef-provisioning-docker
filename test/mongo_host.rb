@@ -1,5 +1,5 @@
-require 'chef_metal_docker'
-with_provisioner ChefMetalDocker::DockerProvisioner.new
+require 'chef/provisioning/docker_driver'
+with_provisioner Chef::Provisioning::DockerDriver::DockerProvisioner.new
 
 base_port = 27020
 
@@ -22,4 +22,3 @@ base_port = 27020
     attribute %w(mongodb config port), port
   end
 end
-

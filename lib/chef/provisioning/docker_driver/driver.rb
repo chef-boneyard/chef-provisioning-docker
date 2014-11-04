@@ -1,19 +1,20 @@
-
 require 'chef/mixin/shell_out'
-require 'chef_metal/driver'
-require 'chef_metal_docker/version'
-require 'chef_metal_docker/docker_transport'
-require 'chef_metal_docker/docker_container_machine'
-require 'chef_metal/convergence_strategy/install_cached'
-require 'chef_metal/convergence_strategy/no_converge'
+require 'chef/provisioning/driver'
+require 'chef/provisioning/docker_driver/version'
+require 'chef/provisioning/docker_driver/docker_transport'
+require 'chef/provisioning/docker_driver/docker_container_machine'
+require 'chef/provisioning/convergence_strategy/install_cached'
+require 'chef/provisioning/convergence_strategy/no_converge'
 
 require 'yaml'
 require 'docker/container'
 require 'docker'
 
-module ChefMetalDocker
+class Chef
+module Provisioning
+module DockerDriver
   # Provisions machines using Docker
-  class DockerDriver < ChefMetal::Driver
+  class Driver < Chef::Provisioning::Driver
 
     include Chef::Mixin::ShellOut
 
@@ -22,13 +23,13 @@ module ChefMetalDocker
     # URL scheme:
     # docker:<path>
     # canonical URL calls realpath on <path>
-    def self.from_url(driver_url, config)
-      DockerDriver.new(driver_url, config)
+    def self.from_url(_url, config)
+      Driver.new(_url, config)
     end
 
-    def initialize(driver_url, config)
+    def initialize(_url, config)
       super
-      url = DockerDriver.connection_url(driver_url)
+      url = Docker.connection_url(_url)
 
       if url
         # Export this as it's expected
@@ -41,17 +42,17 @@ module ChefMetalDocker
       @connection = Docker.connection
     end
 
-    def self.canonicalize_url(driver_url, config)
-      url = DockerDriver.connection_url(driver_url)
+    def self.canonicalize_url(_url, config)
+      url = Docker.connection_url(_url)
       [ "docker:#{url}", config ]
     end
 
-    # Parse the url from a driver URL, try to clean it up
-    # Returns a proper URL from the driver_url string. Examples include:
+    # Parse the url from a  URL, try to clean it up
+    # Returns a proper URL from the _url string. Examples include:
     #   docker:/var/run/docker.sock => unix:///var/run/docker.sock
     #   docker:192.168.0.1:1234 => tcp://192.168.0.1:1234
-    def self.connection_url(driver_url)
-      scheme, url = driver_url.split(':', 2)
+    def self.connection_url(_url)
+      scheme, url = _url.split(':', 2)
 
       if url && url.size > 0
         # Clean up the URL with the protocol if needed (within reason)
@@ -73,8 +74,8 @@ module ChefMetalDocker
 
       container_name = machine_spec.name
       machine_spec.location = {
-          'driver_url' => driver_url,
-          'driver_version' => ChefMetalDocker::VERSION,
+          '_url' => _url,
+          '_version' => Chef::Provisioning::DockerDriver::VERSION,
           'allocated_at' => Time.now.utc.to_s,
           'host_node' => action_handler.host_node,
           'container_name' => container_name,
@@ -182,7 +183,7 @@ module ChefMetalDocker
       }.first
     end
 
-    def driver_url
+    def _url
       "docker:#{Docker.url}"
     end
 
@@ -214,12 +215,12 @@ module ChefMetalDocker
                                       Docker.connection)
 
       convergence_strategy = if docker_options[:from_image]
-                               ChefMetal::ConvergenceStrategy::NoConverge.new({}, config)
+                               Chef::Provisioning::ConvergenceStrategy::NoConverge.new({}, config)
                              else
                                convergence_strategy_for(machine_spec, machine_options)
                              end
 
-        ChefMetalDocker::DockerContainerMachine.new(
+        Chef::Provisioning::DockerDriver::DockerContainerMachine.new(
           machine_spec,
           transport,
           convergence_strategy,
@@ -231,10 +232,12 @@ module ChefMetalDocker
 
     def convergence_strategy_for(machine_spec, machine_options)
       @unix_convergence_strategy ||= begin
-        ChefMetal::ConvergenceStrategy::InstallCached.
+        Chef::Provisioning::ConvergenceStrategy::InstallCached.
             new(machine_options[:convergence_options], config)
       end
     end
 
   end
+end
+end
 end
