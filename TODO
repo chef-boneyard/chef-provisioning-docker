@@ -1,0 +1,28 @@
+- docker inspect -> node attributes
+- container_configuration/host_configuration not working
+- stop docker image if it's running?  Don't use the container name for intermediates unless you have to?
+- make sure to start container after converge, even if converge didn't run
+- throw away container if converge updates 0 resources
+- throw away container if converge fails?
+- create real machine_image resource that doesn't register against the chef server
+- chef-provisioning: make a freaking "chef-provisioning login" that works or I will murder you in your sleep.
+- chef-provisioning: make "chef-provisioning cluster" that runs the recipes againgst your knife.rb without registering the workstation with the server
+- chef-provisioning: high pri invert complete true, stop stripping automatic and default attributes
+- chef-provisioning: rationalize provisioner_options :symbol vs. 'symbol'
+- chef-provisioning: two fog provisioners don't share key_pairs :(  Fix yer credentials man
+- chef-provisioning: :converge action doesn't honor "recipe"
+- chef-provisioning: gangbusters error handling (real exceptions)
+- chef-provisioning: grab stack trace from remote machine when there is an issue
+* chef-provisioning: lxc  is broken
+- chef-provisioning: first_time and one_time recipes that don't affect the run list
+- chef-provisioning: remove any dependencies that require compiling, or package them somehow (omnibus that shit?)
+- chef-provisioning-fog: ssh_username and other similar options should not be compute_options, they should be bootstrap options.
+- consider renaming provisioner_options to machine_options
+- chef-provisioning: clear with_provisioner_options when new with_provisioner is called
+- chef-provisioning: find out why chef-provisioning takes so long to install
+- chef-provisioning-fog: if in ec2, use private ip by default
+* chef-provisioning: allow ssl cert upload, set ssl_verify_mode :verify_peer.  run knife ssl check, if it fails, error (and let the user override at their own peril)
+* chef-provisioning: validator credentials don't work; transitive credentials require upload
+Done
+* chef-provisioning: upload files
+* chef-provisioning: increase timeout for chef-client in particular, add timeout support to provisioner

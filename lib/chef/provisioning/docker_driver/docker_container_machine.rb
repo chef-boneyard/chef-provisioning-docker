@@ -1,7 +1,9 @@
-require 'chef_metal/machine/unix_machine'
+require 'chef/provisioning/machine/unix_machine'
 
-module ChefMetalDocker
-  class DockerContainerMachine < ChefMetal::Machine::UnixMachine
+class Chef
+module Provisioning
+module DockerDriver
+  class DockerContainerMachine < Chef::Provisioning::Machine::UnixMachine
 
     # Expects a machine specification, a usable transport and convergence strategy
     # Options is expected to contain the optional keys
@@ -29,4 +31,6 @@ module ChefMetalDocker
     end
 
   end
+end
+end
 end

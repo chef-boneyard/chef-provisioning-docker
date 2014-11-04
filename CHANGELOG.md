@@ -12,12 +12,12 @@
 - Bug fixes
 - Run final command in detached mode
 - Removed DockerContainer so that it didn't conflict with the docker cookbook
-- Properly use URLs in driver key
+- Properly use URLs in  key
 
 
 ## 0.3 (8/19/2014)
 
-- Rewritten to support the new driver API
+- Rewritten to support the new  API
 - Supports remote API endpoints as well as local 
 - Replaced EMProxy with a plain HTTP proxy 
 - Supports machine images

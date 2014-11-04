@@ -1,19 +1,19 @@
 $:.unshift(File.dirname(__FILE__) + '/lib')
-require 'chef_metal_docker/version'
+require 'chef/provisioning/docker_driver/version'
 
 Gem::Specification.new do |s|
-  s.name = 'chef-metal-docker'
-  s.version = ChefMetalDocker::VERSION
+  s.name = 'chef/provisioning-docker'
+  s.version = Chef::Provisioning::DockerDriver::VERSION
   s.platform = Gem::Platform::RUBY
   s.extra_rdoc_files = ['README.md', 'LICENSE' ]
   s.summary = 'Provisioner for creating Docker containers in Chef Metal.'
   s.description = s.summary
   s.author = 'Tom Duffield'
   s.email = 'tom@getchef.com'
-  s.homepage = 'https://github.com/opscode/chef-metal-docker'
+  s.homepage = 'https://github.com/opscode/chef/provisioning-docker'
 
   s.add_dependency 'chef'
-  s.add_dependency 'chef-metal', '~> 0.9'
+  s.add_dependency 'chef/provisioning', '~> 0.9'
   s.add_dependency 'docker-api'
   s.add_dependency 'sys-proctable'
 
