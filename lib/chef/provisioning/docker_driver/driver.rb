@@ -23,13 +23,13 @@ module DockerDriver
     # URL scheme:
     # docker:<path>
     # canonical URL calls realpath on <path>
-    def self.from_url(_url, config)
-      Driver.new(_url, config)
+    def self.from_url(driver_url, config)
+      Driver.new(driver_url, config)
     end
 
-    def initialize(_url, config)
+    def initialize(driver_url, config)
       super
-      url = Docker.connection_url(_url)
+      url = Driver.connection_url(driver_url)
 
       if url
         # Export this as it's expected
@@ -42,17 +42,17 @@ module DockerDriver
       @connection = Docker.connection
     end
 
-    def self.canonicalize_url(_url, config)
-      url = Docker.connection_url(_url)
+    def self.canonicalize_url(driver_url, config)
+      url = Driver.connection_url(driver_url)
       [ "docker:#{url}", config ]
     end
 
     # Parse the url from a  URL, try to clean it up
-    # Returns a proper URL from the _url string. Examples include:
+    # Returns a proper URL from the driver_url string. Examples include:
     #   docker:/var/run/docker.sock => unix:///var/run/docker.sock
     #   docker:192.168.0.1:1234 => tcp://192.168.0.1:1234
-    def self.connection_url(_url)
-      scheme, url = _url.split(':', 2)
+    def self.connection_url(driver_url)
+      scheme, url = driver_url.split(':', 2)
 
       if url && url.size > 0
         # Clean up the URL with the protocol if needed (within reason)
@@ -74,8 +74,8 @@ module DockerDriver
 
       container_name = machine_spec.name
       machine_spec.location = {
-          '_url' => _url,
-          '_version' => Chef::Provisioning::DockerDriver::VERSION,
+          'driver_url' => driver_url,
+          'driver_version' => Chef::Provisioning::DockerDriver::VERSION,
           'allocated_at' => Time.now.utc.to_s,
           'host_node' => action_handler.host_node,
           'container_name' => container_name,
@@ -183,7 +183,7 @@ module DockerDriver
       }.first
     end
 
-    def _url
+    def driver_url
       "docker:#{Docker.url}"
     end
 
