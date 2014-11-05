@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5 (10/6/2014)
+
+- rename to chef-provisioning-docker
+
 ## 0.4.3 (10/6/2014)
 
 * Disable event output stream live stream if the support for it isn't there
