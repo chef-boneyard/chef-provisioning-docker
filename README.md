@@ -5,7 +5,7 @@ How to use:
 First you need to ensure that Docker is running. This can be done on a Linux host using Docker's installers or on OSX using boot2docker. Once you have that, you can install the dependencies with Bundler and then use the Docker  like the following:
 
 ```  
-CHEF_=docker bundle exec chef-client -z docker_ubuntu_image.rb
+CHEF_DRIVER=docker bundle exec chef-client -z docker_ubuntu_image.rb
 ```   
 
 This will run Chef-zero and use the description stored in docker_ubuntu_image.rb (the second example below). Note that some configuration syntax is likely to change a little bit so be sure to check the documentation. 
