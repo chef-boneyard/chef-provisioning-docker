@@ -1,4 +1,8 @@
 # Changelog
+## 0.5.1 (12/15/14)
+
+- Fix for more recent Docker API library
+- Support ENV variables in the options hash
 
 ## 0.5 (10/6/2014)
 
