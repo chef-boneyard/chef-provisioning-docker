@@ -27,7 +27,7 @@ module DockerDriver
       super action_handler
       if @command
         Chef::Log.debug("DockerContainerMachine converge complete, executing #{@command} in #{@container_name}")
-        @transport.execute(@command, :env=>@env ,:detached => true, :read_only => true, :ports => @ports, :keep_stdin_open => @keep_stdin_open)
+        @transport.execute(@command, :env => @env ,:detached => true, :read_only => true, :ports => @ports, :keep_stdin_open => @keep_stdin_open)
       end
     end
 

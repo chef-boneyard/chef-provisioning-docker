@@ -30,9 +30,9 @@ machine 'wario' do
 
       #ENV (Environment Variables)
       #Set any env var in the container by using one or more -e flags, even overriding those already defined by the developer with a Dockerfile ENV
-      :arg => {
-         "deep"=>'purple',
-         "led"=>'zeppelin'
+      :env => {
+         "deep" => 'purple',
+         "led" => 'zeppelin'
       }
       
       # Ports can be one of two forms:
