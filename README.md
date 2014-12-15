@@ -27,6 +27,13 @@ machine 'wario' do
           :tag => '14.04'
       },
       :command => '/usr/sbin/sshd -p 8022 -D',      
+
+      #ENV (Environment Variables)
+      #Set any env var in the container by using one or more -e flags, even overriding those already defined by the developer with a Dockerfile ENV
+      :arg => {
+         "deep"=>'purple',
+         "led"=>'zeppelin'
+      }
       
       # Ports can be one of two forms:
       # src_port (string or integer) is a pass-through, i.e 8022 or "9933"

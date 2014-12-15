@@ -11,6 +11,7 @@ module DockerDriver
     #   :ports => a list of port numbers to listen on
     def initialize(machine_spec, transport, convergence_strategy, opts = {})
       super(machine_spec, transport, convergence_strategy)
+      @env = opts[:env]
       @command = opts[:command]
       @ports = opts[:ports]
       @keep_stdin_open = opts[:keep_stdin_open]
@@ -26,7 +27,7 @@ module DockerDriver
       super action_handler
       if @command
         Chef::Log.debug("DockerContainerMachine converge complete, executing #{@command} in #{@container_name}")
-        @transport.execute(@command, :detached => true, :read_only => true, :ports => @ports, :keep_stdin_open => @keep_stdin_open)
+        @transport.execute(@command, :env=>@env ,:detached => true, :read_only => true, :ports => @ports, :keep_stdin_open => @keep_stdin_open)
       end
     end
 

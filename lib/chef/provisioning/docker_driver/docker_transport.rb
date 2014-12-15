@@ -32,6 +32,7 @@ module DockerDriver
 
     # Execute the specified command inside the container, returns a Mixlib::Shellout object
     # Options contains the optional keys:
+    #   :env => env vars
     #   :read_only => Do not commit this execute operation, just execute it
     #   :ports => ports to listen on (-p command-line options)
     #   :detached => true/false, execute this command in detached mode (for final program to run)
@@ -61,6 +62,13 @@ module DockerDriver
       live_stream = options[:stream_stdout] if options[:stream_stdout]
 
       args = ['docker', 'run', '--name', container_name]
+
+      if options[:env]      
+	options[:env].each do |key, value| 
+          args << '-e'
+          args << "#{key}=#{value}"
+        end
+      end
 
       if options[:detached]
         args << '--detach'
