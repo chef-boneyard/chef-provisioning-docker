@@ -115,7 +115,7 @@ module DockerDriver
           tarfile << block
         end
       rescue Docker::Error::ServerError
-        if $!.message =~ /500/
+        if $!.message =~ /500/ || $!.message =~ /Could not find the file/
           return nil
         else
           raise
