@@ -175,7 +175,7 @@ module DockerDriver
       host = Socket.getaddrinfo(uri.host, uri.scheme, nil, :STREAM)[0][3]
       Chef::Log.debug("Making URL available: #{host}")
 
-      if host == '127.0.0.1' || host == '[::1]'
+      if host == '127.0.0.1' || host == '::1'
         result = execute('ip route ls', :read_only => true)
 
         Chef::Log.debug("IP route: #{result.stdout}")
