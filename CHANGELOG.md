@@ -1,5 +1,9 @@
 # Changelog
-## 0.5.1 (12/15/14)
+## 0.5.2 (2/25/2015)
+
+- Fix Docker driver on IPv6 containers
+
+## 0.5.1 (12/15/2014)
 
 - Fix for more recent Docker API library
 - Support ENV variables in the options hash
