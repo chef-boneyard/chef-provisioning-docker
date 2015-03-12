@@ -105,7 +105,8 @@ module DockerDriver
         target_repository = 'chef'
         target_tag = machine_spec.name
 
-        image = find_image(target_repository, target_tag)
+        # check if target image exists, if not try to look up for source image.
+        image = find_image(target_repository, target_tag) || find_image(source_repository, source_tag)
 
         # kick off image creation
         if image == nil
@@ -116,6 +117,10 @@ module DockerDriver
           Chef::Log.debug("Allocated #{image}")
           image.tag('repo' => 'chef', 'tag' => target_tag)
           Chef::Log.debug("Tagged image #{image}")
+        elsif not image.info['RepoTags'].include? "#{target_repository}:#{target_tag}"
+          # if `find_image(source_repository, source_tag)` returned result, assign target tag to it to be able
+          # find it in `start_machine`. 
+          image.tag('repo' => target_repository, 'tag' => target_tag)
         end
 
         "#{target_repository}:#{target_tag}"
