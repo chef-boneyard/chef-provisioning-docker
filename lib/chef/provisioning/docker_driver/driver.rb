@@ -3,6 +3,7 @@ require 'chef/provisioning/driver'
 require 'chef/provisioning/docker_driver/version'
 require 'chef/provisioning/docker_driver/docker_transport'
 require 'chef/provisioning/docker_driver/docker_container_machine'
+require 'chef/provisioning/docker_driver/chef_dsl'
 require 'chef/provisioning/convergence_strategy/install_cached'
 require 'chef/provisioning/convergence_strategy/no_converge'
 
@@ -27,9 +28,28 @@ module DockerDriver
       Driver.new(driver_url, config)
     end
 
+    def self.canonicalize_url(driver_url, config)
+      scheme, url = driver_url.split(':', 2)
+      if url && !url.empty?
+        # Clean up the connection URL first, within reason. Examples include:
+        #   docker:/var/run/docker.sock => unix:///var/run/docker.sock
+        #   docker:192.168.0.1:1234 => tcp://192.168.0.1:1234
+        case url
+        when /^\d+\.\d+\.\d+\.\d+:\d+$/
+          url = "tcp://#{url}"
+        when /^\//
+          url = "unix://#{url}"
+        when /^(tcp|unix):/
+        else
+          url = "tcp://#{url}"
+        end
+      end
+      [ "docker:#{url}", config ]
+    end
+
     def initialize(driver_url, config)
       super
-      url = Driver.connection_url(driver_url)
+      scheme, url = driver_url.split(':', 2)
 
       if url
         # Export this as it's expected
@@ -41,34 +61,6 @@ module DockerDriver
 
       @connection = Docker.connection
     end
-
-    def self.canonicalize_url(driver_url, config)
-      url = Driver.connection_url(driver_url)
-      [ "docker:#{url}", config ]
-    end
-
-    # Parse the url from a  URL, try to clean it up
-    # Returns a proper URL from the driver_url string. Examples include:
-    #   docker:/var/run/docker.sock => unix:///var/run/docker.sock
-    #   docker:192.168.0.1:1234 => tcp://192.168.0.1:1234
-    def self.connection_url(driver_url)
-      scheme, url = driver_url.split(':', 2)
-
-      if url && url.size > 0
-        # Clean up the URL with the protocol if needed (within reason)
-        case url
-        when /^\d+\.\d+\.\d+\.\d+:\d+$/
-          "tcp://#{url}"
-        when /^\//
-          "unix://#{url}"
-        when /^(tcp|unix)/
-          url
-        else
-          "tcp://#{url}"
-        end
-      end
-    end
-
 
     def allocate_machine(action_handler, machine_spec, machine_options)
 
@@ -91,7 +83,7 @@ module DockerDriver
 
     def build_container(machine_spec, machine_options)
 
-      docker_options = machine_options[:docker_options]
+      docker_options = docker_options_for(machine_options)
 
       base_image = docker_options[:base_image]
       source_name = base_image[:name]
@@ -194,7 +186,7 @@ module DockerDriver
       begin
         Docker::Container.get(container_name, @connection)
       rescue Docker::Error::NotFoundError
-        docker_options = machine_options[:docker_options]
+        docker_options = docker_options_for(machine_options)
         Chef::Log.debug("Start machine for container #{container_name} using base image #{base_image_name} with options #{docker_options.inspect}")
         image = image_named(base_image_name)
         container = Docker::Container.create('Image' => image.id, 'name' => container_name)
@@ -207,7 +199,7 @@ module DockerDriver
     def machine_for(machine_spec, machine_options, base_image_name)
       Chef::Log.debug('machine_for...')
 
-      docker_options = machine_options[:docker_options]
+      docker_options = docker_options_for(machine_options)
 
       transport = DockerTransport.new(machine_spec.location['container_name'],
                                       base_image_name,
@@ -236,6 +228,12 @@ module DockerDriver
         Chef::Provisioning::ConvergenceStrategy::InstallCached.
             new(machine_options[:convergence_options], config)
       end
+    end
+
+    def docker_options_for(machine_options)
+      docker_options = (machine_options[:docker_options] || {}).dup
+      docker_options[:base_image] ||= {}
+      docker_options
     end
 
   end
