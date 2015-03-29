@@ -19,6 +19,7 @@ module DockerDriver
       @credentials = credentials
       @connection = connection
       @tunnel_transport = tunnel_transport
+      Docker.logger = Chef::Log.logger
     end
 
     include Chef::Mixin::ShellOut
@@ -63,8 +64,8 @@ module DockerDriver
 
       args = ['docker', 'run', '--name', container_name]
 
-      if options[:env]      
-	options[:env].each do |key, value| 
+      if options[:env]
+        options[:env].each do |key, value|
           args << '-e'
           args << "#{key}=#{value}"
         end

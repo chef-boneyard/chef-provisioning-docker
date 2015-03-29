@@ -20,7 +20,7 @@ module Chef::DSL::Recipe
     chef_server_url = docker_host.make_url_available_to_remote(chef_server[:chef_server_url], bind_to: docker_host_ip)
 
     # We will talk to the docker API itself via the SSH connection, since it isn't generally exposed directly to the outside world.
-    docker_api_url = docker_host.make_remote_url_available_locally('tcp://127.0.0.1:5555')
+    docker_api_url = docker_host.make_remote_url_available_locally('tcp://localhost:5555')
 
     with_driver("docker:#{docker_api_url}") { recipe.call(chef_server_url) }
   end
