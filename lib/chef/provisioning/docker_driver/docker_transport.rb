@@ -103,7 +103,7 @@ module DockerDriver
 
       unless options[:read_only]
         Chef::Log.debug("Committing #{container_name} as #{repository_name}:#{container_name}")
-        container = Docker::Container.get(container_name)
+        container = Docker::Container.get(container_name, {}, connection)
         @image = container.commit('repo' => repository_name, 'tag' => container_name)
       end
 
