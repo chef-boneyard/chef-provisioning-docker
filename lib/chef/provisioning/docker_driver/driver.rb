@@ -227,6 +227,7 @@ module DockerDriver
           :command => docker_options[:command],
           :env => docker_options[:env],
           :ports => [].push(docker_options[:ports]).flatten,
+          :volumes => [].push(docker_options[:volumes]).flatten.compact,
           :keep_stdin_open => docker_options[:keep_stdin_open]
         )
     end

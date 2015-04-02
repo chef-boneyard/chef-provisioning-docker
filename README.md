@@ -34,7 +34,7 @@ machine 'wario' do
          "deep" => 'purple',
          "led" => 'zeppelin'
       }
-      
+
       # Ports can be one of two forms:
       # src_port (string or integer) is a pass-through, i.e 8022 or "9933"
       # src:dst (string) is a map from src to dst, i.e "8022:8023" maps 8022 externally to 8023 in the container
@@ -45,6 +45,17 @@ machine 'wario' do
       # Examples (single):
       :ports => 1234
       :ports => "2345:6789"
+
+      # Volumes can be one of three forms:
+      # src_volume (string) is volume to add to container, i.e. creates new volume inside container at "/tmp"
+      # src:dst (string) mounts host's directory src to container's dst, i.e "/tmp:/tmp1" mounts host's directory /tmp to container's /tmp1
+      # src:dst:mode (string) mounts host's directory src to container's dst with the specified mount option, i.e "/:/rootfs:ro" mounts read-only host's root (/) folder to container's /rootfs
+
+      # Example (single):
+      :volumes => "/tmp"
+
+      # Example (multiple):
+      :volumes => ["/tmp:/tmp", "/:/rootfs:ro"]
 
       # if you need to keep stdin open (i.e docker run -i)
       # :keep_stdin_open => true
