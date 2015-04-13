@@ -63,8 +63,8 @@ module DockerDriver
 
       args = ['docker', 'run', '--name', container_name]
 
-      if options[:env]      
-	options[:env].each do |key, value| 
+      if options[:env]
+        options[:env].each do |key, value|
           args << '-e'
           args << "#{key}=#{value}"
         end
@@ -178,6 +178,10 @@ module DockerDriver
 
     def make_url_available_to_remote(url)
       # The host is already open to the container.  Just find out its address and return it!
+      # FIXME: make a proper fix
+      if /^chefzero:\/\/localhost/ =~ url
+        url.gsub!(/^chefzero/, 'http')
+      end
       uri = URI(url)
       host = Socket.getaddrinfo(uri.host, uri.scheme, nil, :STREAM)[0][3]
       Chef::Log.debug("Making URL available: #{host}")
