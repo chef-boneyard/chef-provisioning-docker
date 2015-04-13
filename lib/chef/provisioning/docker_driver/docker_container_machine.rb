@@ -20,6 +20,9 @@ module DockerDriver
       @transport = transport
     end
 
+    # Expose volumes to be able to access it from DockerConvergenceStrategy.
+    attr_reader :volumes
+
     def execute_always(command, options = {})
       transport.execute(command, { :read_only => true }.merge(options))
     end
