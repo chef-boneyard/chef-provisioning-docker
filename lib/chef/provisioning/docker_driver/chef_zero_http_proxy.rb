@@ -79,7 +79,6 @@ class ChefZeroHttpProxy
     loop do
       to_server.read(8192, buff)
       to_client.write(buff)
-      break if buff.size < 8192
     end
 
     # Close the sockets
