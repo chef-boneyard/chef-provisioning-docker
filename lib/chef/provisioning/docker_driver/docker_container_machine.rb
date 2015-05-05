@@ -14,6 +14,7 @@ module DockerDriver
       @env = opts[:env]
       @command = opts[:command]
       @ports = opts[:ports]
+      @volumes = opts[:volumes]
       @keep_stdin_open = opts[:keep_stdin_open]
       @container_name = machine_spec.location['container_name']
       @transport = transport
@@ -27,7 +28,7 @@ module DockerDriver
       super action_handler
       if @command
         Chef::Log.debug("DockerContainerMachine converge complete, executing #{@command} in #{@container_name}")
-        @transport.execute(@command, :env => @env ,:detached => true, :read_only => true, :ports => @ports, :keep_stdin_open => @keep_stdin_open)
+        @transport.execute(@command, :env => @env ,:detached => true, :read_only => true, :ports => @ports, :volumes => @volumes, :keep_stdin_open => @keep_stdin_open)
       end
     end
 

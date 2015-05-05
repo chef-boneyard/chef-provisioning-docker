@@ -81,6 +81,13 @@ module DockerDriver
         end
       end
 
+      if options[:volumes]
+        options[:volumes].each do |volume|
+          args << '-v'
+          args << "#{volume}"
+        end
+      end
+
       if options[:keep_stdin_open]
         args << '-i'
       end
