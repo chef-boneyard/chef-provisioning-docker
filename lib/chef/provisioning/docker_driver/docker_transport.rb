@@ -7,18 +7,18 @@ require 'socket'
 require 'mixlib/shellout'
 require 'sys/proctable'
 require 'chef/provisioning/docker_driver/chef_zero_http_proxy'
+require 'chef/provisioning/docker_driver/docker_process'
 
 class Chef
 module Provisioning
 module DockerDriver
   class DockerTransport < Chef::Provisioning::Transport
-    def initialize(container_name, base_image_name, credentials, connection, tunnel_transport = nil)
+    def initialize(config, container_name, credentials, connection)
+      @config = config
       @repository_name = 'chef'
       @container_name = container_name
-      @image = Docker::Image.get(base_image_name, connection)
       @credentials = credentials
       @connection = connection
-      @tunnel_transport = tunnel_transport
       Docker.logger = Chef::Log.logger
     end
 
@@ -29,94 +29,23 @@ module DockerDriver
     attr_reader :image
     attr_reader :credentials
     attr_reader :connection
-    attr_reader :tunnel_transport
 
     # Execute the specified command inside the container, returns a Mixlib::Shellout object
     # Options contains the optional keys:
-    #   :env => env vars
-    #   :read_only => Do not commit this execute operation, just execute it
-    #   :ports => ports to listen on (-p command-line options)
-    #   :detached => true/false, execute this command in detached mode (for final program to run)
+    #   :detached => true/false - execute this command in detached mode (returns the DockerProcess object early, use wait() to join with it)
+    #   :tty => true/false - set up a TTY for this command
+    #   :stdin => IO - IO object to use for stdin
+    #   :stream => true|false|IO - turn on stdout+stderr streaming
+    #   :stream_stdout => true|false|IO - the IO to stream stdout to, or true for STDOUT
+    #   :stream_stderr => true|false|IO - the IO to stream stderr to, or true for STDERR
+    #
     def execute(command, options={})
       Chef::Log.debug("execute '#{command}' with options #{options}")
-
-      begin
-        connection.post("/containers/#{container_name}/stop?t=0", '')
-        Chef::Log.debug("stopped /containers/#{container_name}")
-      rescue Excon::Errors::NotModified
-        Chef::Log.debug("Already stopped #{container_name}")
-      rescue Docker::Error::NotFoundError
-      end
-
-      begin
-        # Delete the container if it exists and is dormant
-        connection.delete("/containers/#{container_name}?v=true&force=true")
-        Chef::Log.debug("deleted /containers/#{container_name}")
-      rescue Docker::Error::NotFoundError
-      end
-
-      command = Shellwords.split(command) if command.is_a?(String)
-
-      # TODO shell_out has no way to live stream stderr???
-      live_stream = nil
-      live_stream = STDOUT if options[:stream]
-      live_stream = options[:stream_stdout] if options[:stream_stdout]
-
-      args = ['docker', 'run', '--name', container_name]
-
-      if options[:env]
-        options[:env].each do |key, value|
-          args << '-e'
-          args << "#{key}=#{value}"
-        end
-      end
-
-      if options[:detached]
-        args << '--detach'
-      end
-
-      if options[:ports]
-        options[:ports].each do |portnum|
-          args << '-p'
-          args << "#{portnum}"
-        end
-      end
-
-      if options[:keep_stdin_open]
-        args << '-i'
-      end
-
-      args << @image.id
-      args += command
-
-      cmdstr = Shellwords.join(args)
-      Chef::Log.debug("Executing #{cmdstr}")
-
-      # Remove this when https://github.com/opscode/chef/pull/2100 gets merged and released
-      # nullify live_stream because at the moment EventsOutputStream doesn't understand <<, which
-      # ShellOut uses
-      live_stream = nil unless live_stream.respond_to? :<<
-
-      cmd = Mixlib::ShellOut.new(cmdstr, :live_stream => live_stream, :timeout => execute_timeout(options))
-
-      cmd.run_command
-
-      unless options[:read_only]
-        Chef::Log.debug("Committing #{container_name} as #{repository_name}:#{container_name}")
-        container = Docker::Container.get(container_name, {}, connection)
-        @image = container.commit('repo' => repository_name, 'tag' => container_name)
-      end
-
-      Chef::Log.debug("Execute complete: status #{cmd.exitstatus}")
-
-      cmd
+      DockerProcess.run(self, command, options)
     end
 
     def read_file(path)
-      container = Docker::Container.create({
-        'Image' => @image.id,
-        'Cmd' => %w(echo true)
-      }, connection)
+      container = Docker::Container.new(connection, { 'id' => container_name })
       begin
         tarfile = ''
         # NOTE: this would be more efficient if we made it a stream and passed that to Minitar
@@ -129,8 +58,6 @@ module DockerDriver
         else
           raise
         end
-      ensure
-        container.delete
       end
 
       output = ''
@@ -147,27 +74,7 @@ module DockerDriver
     end
 
     def write_file(path, content)
-      # TODO hate tempfiles.  Find an in memory way.
-      Tempfile.open('metal_docker_write_file') do |file|
-        file.write(content)
-        file.close
-        @image = @image.insert_local('localPath' => file.path, 'outputPath' => path, 't' => "#{repository_name}:#{container_name}")
-      end
-    end
-
-    def download_file(path, local_path)
-      # TODO stream
-      file = File.open(local_path, 'w')
-      begin
-        file.write(read_file(path))
-        file.close
-      rescue
-        File.delete(file)
-      end
-    end
-
-    def upload_file(local_path, path)
-      @image = @image.insert_local('localPath' => local_path, 'outputPath' => path, 't' => "#{repository_name}:#{container_name}")
+      execute("cat > #{path}", stdin: StringIO.new(content))
     end
 
     def make_url_available_to_remote(url)
@@ -179,7 +86,7 @@ module DockerDriver
       if host == '127.0.0.1' || host == '::1'
         result = execute('ip route ls', :read_only => true)
 
-        Chef::Log.debug("IP route: #{result.stdout}")
+        Chef::Log.debug("IP route: #{result.stdout}\n")
 
         if result.stdout =~ /default via (\S+)/
 
@@ -202,7 +109,7 @@ module DockerDriver
 
           return uri.to_s
         else
-          raise "Cannot forward port: ip route ls did not show default in expected format.\nSTDOUT: #{result.stdout}"
+          raise "Cannot forward port: ip route ls did not show default in expected format.\nSTDOUT: #{result.stdout}\nSTDERR: #{result.stderr}"
         end
       end
       url
@@ -213,6 +120,8 @@ module DockerDriver
     end
 
     def available?
+      container = Docker::Container.get(connection, { 'id' => container_name })
+      container && container.running?
     end
 
     private
@@ -314,5 +223,15 @@ class Docker::Connection
     raise ServerError, ex.message
   rescue Excon::Errors::Timeout => ex
     raise TimeoutError, ex.message
+  end
+end
+
+# Remove this when https://github.com/opscode/chef/pull/2100 gets merged and released
+# nullify live_stream because at the moment EventsOutputStream doesn't understand <<, which
+# ShellOut uses
+
+class Chef::EventDispatch::EventsOutputStream
+  def <<(str)
+    print(str)
   end
 end

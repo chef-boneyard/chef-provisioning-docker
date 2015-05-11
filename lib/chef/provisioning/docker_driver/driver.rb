@@ -2,7 +2,6 @@ require 'chef/mixin/shell_out'
 require 'chef/provisioning/driver'
 require 'chef/provisioning/docker_driver/version'
 require 'chef/provisioning/docker_driver/docker_transport'
-require 'chef/provisioning/docker_driver/docker_container_machine'
 require 'chef/provisioning/docker_driver/chef_dsl'
 require 'chef/provisioning/convergence_strategy/install_cached'
 require 'chef/provisioning/convergence_strategy/no_converge'
@@ -66,10 +65,26 @@ module DockerDriver
       @credentials = driver_options[:docker_credentials]
     end
 
-    def allocate_machine(action_handler, machine_spec, machine_options)
+    #
+    # The steps of docker:
+    # allocate: must be quick; must ensure a name we can get back to; *should* try to provision in the background.  MUST NOT converge recipes.
+    #   - creates a container based on the image, with no convergence.
+    # ready: Machine is expected to have an IP and anything else you need to interconnect.  MUST NOT converge recipes.  Container must not be running.
+    #   - no action.
+    # setup: Get machine prepped to receive Chef.  MUST NOT converge recipes.  Container must not be running.
+    #   - no action.
+    # converge: bulk of configure time spent here.  MUST converge recipes.  Container must be running.
+    #   - converge; start or restart container after converge
+    # stop:
+    #   - stop container
+    # start:
+    #   - start container
+    # destroy:
+    #   - delete container
 
+    def allocate_machine(action_handler, machine_spec, machine_options)
       container_name = machine_spec.name
-      machine_spec.location = {
+      machine_spec.reference = {
           'driver_url' => driver_url,
           'driver_version' => Chef::Provisioning::DockerDriver::VERSION,
           'allocated_at' => Time.now.utc.to_s,
@@ -77,98 +92,36 @@ module DockerDriver
           'container_name' => container_name,
           'image_id' => machine_options[:image_id]
       }
+      container_name = machine_spec.name
+      converge = machine_for(machine_spec, machine_options).convergence_strategy
+      converge.create_container(action_handler)
     end
 
     def ready_machine(action_handler, machine_spec, machine_options)
-      base_image_name = build_container(machine_spec, machine_options)
-      start_machine(action_handler, machine_spec, machine_options, base_image_name)
-      machine_for(machine_spec, machine_options, base_image_name)
     end
 
-    def build_container(machine_spec, machine_options)
-
-      docker_options = docker_options_for(machine_options)
-
-      base_image = docker_options[:base_image]
-      source_name = base_image[:name]
-      source_repository = base_image[:repository]
-      source_tag = base_image[:tag]
-
-      # Don't do this if we're loading from an image
-      if docker_options[:from_image]
-        "#{source_repository}:#{source_tag}"
-      else
-        target_repository = 'chef'
-        target_tag = machine_spec.name
-
-        image = find_image(target_repository, target_tag)
-
-        # kick off image creation
-        if image == nil
-          Chef::Log.debug("No matching images for #{target_repository}:#{target_tag}, creating!")
-          if !source_name && !source_repository && !source_tag
-            raise "Must specify `from_image` or `machine_options: { base_image: { name: 'imagename', repository: 'repository', tag: 'tag' } }`"
-          end
-          image = Docker::Image.create({ 'fromImage' => source_name,
-                                         'repo' => source_repository ,
-                                         'tag' => source_tag },
-                                         credentials, connection)
-          Chef::Log.debug("Allocated #{image}")
-          image.tag('repo' => 'chef', 'tag' => target_tag)
-          Chef::Log.debug("Tagged image #{image}")
-        end
-
-        "#{target_repository}:#{target_tag}"
-      end
+    def stop_machine(action_handler, machine_spec, machine_options)
+      machine = machine_for(machine_spec, machine_options)
+      machine.convergence_strategy.stop_container(action_handler)
     end
 
-    def allocate_image(action_handler, image_spec, image_options, machine_spec)
-      # Set machine options on the image to match our newly created image
-      image_spec.machine_options = {
-        :docker_options => {
-          :base_image => {
-            :name => "chef_#{image_spec.name}",
-            :repository => 'chef',
-            :tag => image_spec.name
-          },
-          :from_image => true
-        }
-      }
+    def destroy_machine(action_handler, machine_spec, machine_options)
+      machine = machine_for(machine_spec, machine_options)
+      machine.convergence_strategy.delete_container(action_handler)
+    end
+
+    # Images:
+
+    def allocate_image(action_handler, image_spec, image_options, machine_spec, machine_options)
+      machine_for(machine_spec, machine_options).convergency_strategy.converge_image
     end
 
     def ready_image(action_handler, image_spec, image_options)
-      Chef::Log.debug('READY IMAGE!')
     end
 
     # Connect to machine without acquiring it
     def connect_to_machine(machine_spec, machine_options)
-      Chef::Log.debug('Connect to machine!')
-    end
-
-    def destroy_machine(action_handler, machine_spec, machine_options)
-      container_name = machine_spec.location['container_name']
-      Chef::Log.debug("Destroying container: #{container_name}")
-      container = Docker::Container.get(container_name, {}, connection)
-
-      begin
-        Chef::Log.debug("Stopping #{container_name}")
-        container.stop
-      rescue Excon::Errors::NotModified
-        # this is okay
-        Chef::Log.debug('Already stopped!')
-      end
-
-      Chef::Log.debug("Removing #{container_name}")
-      container.delete
-
-      Chef::Log.debug("Destroying image: chef:#{container_name}")
-      image = Docker::Image.get("chef:#{container_name}", {}, connection)
-      image.delete
-
-    end
-
-    def stop_machine(action_handler, node)
-      Chef::Log.debug("Stop machine: #{node.inspect}")
+      machine_for(machine_spec, machine_options)
     end
 
     def image_named(image_name)
@@ -183,65 +136,23 @@ module DockerDriver
       }.first
     end
 
-    def driver_url
-      "docker:#{Docker.url}"
-    end
-
-    def start_machine(action_handler, machine_spec, machine_options, base_image_name)
-      # Spin up a docker instance if needed, otherwise use the existing one
-      container_name = machine_spec.location['container_name']
-
-      begin
-        Docker::Container.get(container_name, {}, connection)
-      rescue Docker::Error::NotFoundError
-        docker_options = docker_options_for(machine_options)
-        Chef::Log.debug("Start machine for container #{container_name} using base image #{base_image_name} with options #{docker_options.inspect}")
-        image = image_named(base_image_name)
-        container = Docker::Container.create({ 'Image' => image.id, 'name' => container_name }, connection)
-        Chef::Log.debug("Container id: #{container.id}")
-        machine_spec.location['container_id'] = container.id
-      end
-
-    end
-
-    def machine_for(machine_spec, machine_options, base_image_name)
-       Chef::Log.debug('machine_for...')
-
-      docker_options = docker_options_for(machine_options)
-
+    def machine_for(machine_spec, machine_options)
       transport = DockerTransport.new(machine_spec.location['container_name'],
-                                      base_image_name,
                                       credentials,
                                       connection)
 
-      convergence_strategy = if docker_options[:from_image]
-                               Chef::Provisioning::ConvergenceStrategy::NoConverge.new({}, config)
-                             else
-                               convergence_strategy_for(machine_spec, machine_options)
-                             end
+      convergence_strategy = DockerConvergenceStrategy.new(
+        connection,
+        machine_options[:create_options] || {},
+        machine_options[:convergence_options] || {},
+        config
+      )
 
-        Chef::Provisioning::DockerDriver::DockerContainerMachine.new(
-          machine_spec,
-          transport,
-          convergence_strategy,
-          :command => docker_options[:command],
-          :env => docker_options[:env],
-          :ports => [].push(docker_options[:ports]).flatten,
-          :keep_stdin_open => docker_options[:keep_stdin_open]
-        )
-    end
-
-    def convergence_strategy_for(machine_spec, machine_options)
-      @unix_convergence_strategy ||= begin
-        Chef::Provisioning::ConvergenceStrategy::InstallCached.
-            new(machine_options[:convergence_options], config)
-      end
-    end
-
-    def docker_options_for(machine_options)
-      docker_options = (machine_options[:docker_options] || {}).dup
-      docker_options[:base_image] ||= {}
-      docker_options
+      Chef::Provisioning::Machine::UnixMachine.new(
+        machine_spec,
+        transport,
+        convergence_strategy
+      )
     end
   end
 end
