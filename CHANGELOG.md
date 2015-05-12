@@ -1,4 +1,9 @@
 # Changelog
+## 0.6 (5/12/2015)
+
+- Fix issue #38 (issue transferring data over local mode proxy) (@shaneramey)
+- Add volumes support (@marc-)
+
 ## 0.5.2 (2/25/2015)
 
 - Fix Docker driver on IPv6 containers
