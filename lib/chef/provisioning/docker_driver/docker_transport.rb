@@ -183,7 +183,7 @@ module DockerDriver
       Chef::Log.debug("Making URL available: #{host}")
 
       if host == '127.0.0.1' || host == '::1'
-        result = execute('ip route ls', :read_only => true)
+        result = execute('ip route list', :read_only => true)
 
         Chef::Log.debug("IP route: #{result.stdout}")
 
