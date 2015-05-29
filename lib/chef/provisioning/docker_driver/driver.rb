@@ -5,6 +5,7 @@ require 'chef/provisioning/docker_driver/docker_transport'
 require 'chef/provisioning/docker_driver/docker_container_machine'
 require 'chef/provisioning/convergence_strategy/install_cached'
 require 'chef/provisioning/convergence_strategy/no_converge'
+require 'chef/mash'
 
 require 'yaml'
 require 'docker/container'
@@ -73,13 +74,14 @@ module DockerDriver
     def allocate_machine(action_handler, machine_spec, machine_options)
 
       container_name = machine_spec.name
-      machine_spec.location = {
+      machine_spec.reference = {
           'driver_url' => driver_url,
           'driver_version' => Chef::Provisioning::DockerDriver::VERSION,
           'allocated_at' => Time.now.utc.to_s,
           'host_node' => action_handler.host_node,
           'container_name' => container_name,
-          'image_id' => machine_options[:image_id]
+          'image_id' => machine_options[:image_id],
+          'docker_options' => machine_options[:docker_options]
       }
     end
 
@@ -90,10 +92,13 @@ module DockerDriver
     end
 
     def build_container(machine_spec, machine_options)
-
       docker_options = machine_options[:docker_options]
 
       base_image = docker_options[:base_image]
+      if !base_image
+        Chef::Log.debug("No base images specified in docker options.")
+        base_image = base_image_for(machine_spec)
+      end
       source_name = base_image[:name]
       source_repository = base_image[:repository]
       source_tag = base_image[:tag]
@@ -105,7 +110,8 @@ module DockerDriver
         target_repository = 'chef'
         target_tag = machine_spec.name
 
-        image = find_image(target_repository, target_tag)
+        # check if target image exists, if not try to look up for source image.
+        image = find_image(target_repository, target_tag) || find_image(source_repository, source_tag)
 
         # kick off image creation
         if image == nil
@@ -116,15 +122,22 @@ module DockerDriver
           Chef::Log.debug("Allocated #{image}")
           image.tag('repo' => 'chef', 'tag' => target_tag)
           Chef::Log.debug("Tagged image #{image}")
+        elsif not image.info['RepoTags'].include? "#{target_repository}:#{target_tag}"
+          # if `find_image(source_repository, source_tag)` returned result, assign target tag to it to be able
+          # find it in `start_machine`.
+          image.tag('repo' => target_repository, 'tag' => target_tag)
         end
 
         "#{target_repository}:#{target_tag}"
       end
     end
 
-    def allocate_image(action_handler, image_spec, image_options, machine_spec)
+    def allocate_image(action_handler, image_spec, image_options, machine_spec, machine_options)
       # Set machine options on the image to match our newly created image
-      image_spec.machine_options = {
+      image_spec.reference = {
+        'driver_url' => driver_url,
+        'driver_version' => Chef::Provisioning::DockerDriver::VERSION,
+        'allocated_at' => Time.now.to_i,
         :docker_options => {
           :base_image => {
             :name => "chef_#{image_spec.name}",
@@ -134,6 +147,8 @@ module DockerDriver
           :from_image => true
         }
       }
+      # Workaround for chef/chef-provisioning-docker#37
+      machine_spec.attrs[:keep_image] = true
     end
 
     def ready_image(action_handler, image_spec, image_options)
@@ -161,10 +176,11 @@ module DockerDriver
       Chef::Log.debug("Removing #{container_name}")
       container.delete
 
-      Chef::Log.debug("Destroying image: chef:#{container_name}")
-      image = Docker::Image.get("chef:#{container_name}")
-      image.delete
-
+      if !machine_spec.attrs[:keep_image] && !machine_options[:keep_image]
+        Chef::Log.debug("Destroying image: chef:#{container_name}")
+        image = Docker::Image.get("chef:#{container_name}")
+        image.delete
+      end
     end
 
     def stop_machine(action_handler, node)
@@ -226,8 +242,8 @@ module DockerDriver
           convergence_strategy,
           :command => docker_options[:command],
           :env => docker_options[:env],
-          :ports => [].push(docker_options[:ports]).flatten,
-          :volumes => [].push(docker_options[:volumes]).flatten.compact,
+          :ports => Array(docker_options[:ports]),
+          :volumes => Array(docker_options[:volumes]),
           :keep_stdin_open => docker_options[:keep_stdin_open]
         )
     end
@@ -239,6 +255,11 @@ module DockerDriver
       end
     end
 
+    def base_image_for(machine_spec)
+      Chef::Log.debug("Looking for image #{machine_spec.from_image}")
+      image_spec = machine_spec.managed_entry_store.get!(:machine_image, machine_spec.from_image)
+      Mash.new(image_spec.reference)[:docker_options][:base_image]
+    end
   end
 end
 end

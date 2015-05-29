@@ -13,7 +13,7 @@ Gem::Specification.new do |s|
   s.homepage = 'https://github.com/opscode/chef-provisioning-docker'
 
   s.add_dependency 'chef'
-  s.add_dependency 'chef-provisioning', '~> 0.9'
+  s.add_dependency 'chef-provisioning', '~> 1.0'
   s.add_dependency 'docker-api'
   s.add_dependency 'sys-proctable'
 
