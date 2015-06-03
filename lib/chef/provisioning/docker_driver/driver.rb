@@ -155,6 +155,12 @@ module DockerDriver
       Chef::Log.debug('READY IMAGE!')
     end
 
+    # workaround for https://github.com/chef/chef-provisioning/issues/358.
+    def destroy_image(action_handler, image_spec, image_options, machine_options={})
+      image = Docker::Image.get("chef:#{image_spec.name}")
+      image.delete unless image.nil?
+    end
+
     # Connect to machine without acquiring it
     def connect_to_machine(machine_spec, machine_options)
       Chef::Log.debug('Connect to machine!')
