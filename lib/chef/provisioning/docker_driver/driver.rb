@@ -152,7 +152,7 @@ module DockerDriver
 
     # Connect to machine without acquiring it
     def connect_to_machine(machine_spec, machine_options)
-      Chef::Log.debug('Connect to machine yo!')
+      Chef::Log.debug('Connect to machine')
       image_name = "chef:#{machine_spec.location['container_name']}"
       machine_for(machine_spec, machine_options, image_name)
     end
@@ -235,11 +235,10 @@ module DockerDriver
       if !container.nil? && container.info['State']['Running'] && container.info['Config']['Cmd'].join(' ')
         transport = DockerRunningTransport.new(container, config)
 
-        Chef::Provisioning::DockerDriver::DockerRunningMachine.new(
+        Chef::Provisioning::Machine::UnixMachine.new(
           machine_spec,
           transport,
-          convergence_strategy,
-          docker_options[:keep_stdin_open]
+          convergence_strategy
         )
       else
         transport = DockerTransport.new(container_name,
