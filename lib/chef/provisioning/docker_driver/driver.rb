@@ -3,6 +3,8 @@ require 'chef/provisioning/driver'
 require 'chef/provisioning/docker_driver/version'
 require 'chef/provisioning/docker_driver/docker_transport'
 require 'chef/provisioning/docker_driver/docker_container_machine'
+require 'chef/provisioning/docker_driver/docker_running_machine'
+require 'chef/provisioning/docker_driver/docker_running_transport'
 require 'chef/provisioning/convergence_strategy/install_cached'
 require 'chef/provisioning/convergence_strategy/no_converge'
 
@@ -151,8 +153,8 @@ module DockerDriver
     # Connect to machine without acquiring it
     def connect_to_machine(machine_spec, machine_options)
       Chef::Log.debug('Connect to machine yo!')
-      # image_name = "chef:#{machine_spec.location['container_name']}"
-      # machine_for(machine_spec, machine_options, image_name)
+      image_name = "chef:#{machine_spec.location['container_name']}"
+      machine_for(machine_spec, machine_options, image_name)
     end
 
     def destroy_machine(action_handler, machine_spec, machine_options)
@@ -215,18 +217,35 @@ module DockerDriver
 
     def machine_for(machine_spec, machine_options, base_image_name)
       Chef::Log.debug('machine_for...')
+      container_name = machine_spec.location['container_name']
       docker_options = machine_options[:docker_options] || Mash.from_hash(machine_spec.location['docker_options'])
+      container = nil
 
-      transport = DockerTransport.new(machine_spec.location['container_name'],
-                                      base_image_name,
-                                      nil,
-                                      Docker.connection)
+      begin
+        container = Docker::Container.get(container_name, @connection)
+      rescue Docker::Error::NotFoundError
+      end
 
       convergence_strategy = if docker_options[:from_image]
                                Chef::Provisioning::ConvergenceStrategy::NoConverge.new({}, config)
                              else
                                convergence_strategy_for(machine_spec, machine_options)
                              end
+
+      if !container.nil? && container.info['State']['Running'] && container.info['Config']['Cmd'].join(' ')
+        transport = DockerRunningTransport.new(container, config)
+
+        Chef::Provisioning::DockerDriver::DockerRunningMachine.new(
+          machine_spec,
+          transport,
+          convergence_strategy,
+          docker_options[:keep_stdin_open]
+        )
+      else
+        transport = DockerTransport.new(container_name,
+                                        base_image_name,
+                                        nil,
+                                        Docker.connection)
 
         Chef::Provisioning::DockerDriver::DockerContainerMachine.new(
           machine_spec,
@@ -238,36 +257,13 @@ module DockerDriver
           :volumes => [].push(docker_options[:volumes]).flatten.compact,
           :keep_stdin_open => docker_options[:keep_stdin_open]
         )
+      end
     end
 
     def convergence_strategy_for(machine_spec, machine_options)
       @unix_convergence_strategy ||= begin
         Chef::Provisioning::ConvergenceStrategy::InstallCached.
             new(machine_options[:convergence_options], config)
-      end
-    end
-
-    def get_container_by_id(container_id)
-      Docker::Container.get(container_id, @connection)
-    rescue Docker::Error::NotFoundError
-    end
-
-    def translate_create_options(options)
-      docker_options = {}
-      docker_options[:Env]  = options[:env] if options[:env]
-
-      if options[:volumes]
-        docker_options[:Volumes] = {}
-        options[:volumes].each do |volume|
-          docker_options[:Volumes][volume.split(':').first] = {}
-        end
-      end
-
-      if options[:ports]
-        docker_options[:ExposedPorts] = {}
-        options[:ports].each do |volume|
-          docker_options[:ExposedPorts][volume.split(':').first] = {}
-        end
       end
     end
   end

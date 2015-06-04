@@ -322,3 +322,14 @@ class Docker::Connection
     raise TimeoutError, ex.message
   end
 end
+
+class Chef
+  module EventDispatch
+    class EventsOutputStream
+      # Mixlib shellout expects streams to have a shift operator 
+      def <<(str)
+        print(str)
+      end
+    end
+  end
+end
