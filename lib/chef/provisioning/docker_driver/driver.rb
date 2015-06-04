@@ -3,7 +3,6 @@ require 'chef/provisioning/driver'
 require 'chef/provisioning/docker_driver/version'
 require 'chef/provisioning/docker_driver/docker_transport'
 require 'chef/provisioning/docker_driver/docker_container_machine'
-require 'chef/provisioning/docker_driver/docker_running_machine'
 require 'chef/provisioning/docker_driver/docker_running_transport'
 require 'chef/provisioning/convergence_strategy/install_cached'
 require 'chef/provisioning/convergence_strategy/no_converge'
@@ -115,10 +114,10 @@ module DockerDriver
         target_repository = 'chef'
         target_tag = machine_spec.location['container_name'] || machine_spec.name
   
-        image = find_image(target_repository, target_tag) # if container.nil?
+        image = find_image(target_repository, target_tag)
 
         # kick off image creation
-        if image == nil # && container == nil
+        if image == nil
           Chef::Log.debug("No matching images for #{target_repository}:#{target_tag}, creating!")
           image = Docker::Image.create('fromImage' => source_name,
                                        'repo' => source_repository ,
