@@ -74,14 +74,14 @@ module DockerDriver
     def allocate_machine(action_handler, machine_spec, machine_options)
       docker_options = machine_options[:docker_options]
       image_id = machine_options[:image_id]
-      if machine_spec.location
-        container_name = machine_spec.location['container_name']
-        image_id ||= machine_spec.location['image_id']
-        docker_options ||= machine_spec.location['docker_options']
+      if machine_spec.reference
+        container_name = machine_spec.reference['container_name']
+        image_id ||= machine_spec.reference['image_id']
+        docker_options ||= machine_spec.reference['docker_options']
       end
 
       container_name ||= machine_spec.name
-      machine_spec.location = {
+      machine_spec.reference = {
           'driver_url' => driver_url,
           'driver_version' => Chef::Provisioning::DockerDriver::VERSION,
           'allocated_at' => Time.now.utc.to_s,
@@ -112,7 +112,7 @@ module DockerDriver
         "#{source_repository}:#{source_tag}"
       else
         target_repository = 'chef'
-        target_tag = machine_spec.location['container_name'] || machine_spec.name
+        target_tag = machine_spec.reference['container_name'] || machine_spec.name
   
         image = find_image(target_repository, target_tag)
 
@@ -157,7 +157,7 @@ module DockerDriver
     end
 
     def destroy_machine(action_handler, machine_spec, machine_options)
-      container_name = machine_spec.location['container_name']
+      container_name = machine_spec.reference['container_name']
       Chef::Log.debug("Destroying container: #{container_name}")
       container = Docker::Container.get(container_name, @connection)
 
@@ -200,7 +200,7 @@ module DockerDriver
 
     def start_machine(action_handler, machine_spec, machine_options, base_image_name)
       # Spin up a docker instance if needed, otherwise use the existing one
-      container_name = machine_spec.location['container_name']
+      container_name = machine_spec.reference['container_name']
       begin
         Docker::Container.get(container_name, @connection)
       rescue Docker::Error::NotFoundError
@@ -209,15 +209,15 @@ module DockerDriver
         image = image_named(base_image_name)
         container = Docker::Container.create('Image' => image.id, 'name' => container_name)
         Chef::Log.debug("Container id: #{container.id}")
-        machine_spec.location['container_id'] = container.id
+        machine_spec.reference['container_id'] = container.id
       end
 
     end
 
     def machine_for(machine_spec, machine_options, base_image_name)
       Chef::Log.debug('machine_for...')
-      container_name = machine_spec.location['container_name']
-      docker_options = machine_options[:docker_options] || Mash.from_hash(machine_spec.location['docker_options'])
+      container_name = machine_spec.reference['container_name']
+      docker_options = machine_options[:docker_options] || Mash.from_hash(machine_spec.reference['docker_options'])
       container = nil
 
       begin

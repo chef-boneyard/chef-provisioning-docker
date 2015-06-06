@@ -16,7 +16,7 @@ module DockerDriver
       @ports = opts[:ports]
       @volumes = opts[:volumes]
       @keep_stdin_open = opts[:keep_stdin_open]
-      @container_name = machine_spec.location['container_name']
+      @container_name = machine_spec.reference['container_name']
       @transport = transport
     end
 
