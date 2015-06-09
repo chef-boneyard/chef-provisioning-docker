@@ -1,4 +1,11 @@
 # Changelog
+
+## 0.7 (TBA)
+
+- Merge PR #47 (support for `chef-provisioning` 1.x, fixes several bugs) (@marc-)
+- Fix issue #50 (add `machine_image` `:destroy`)
+- Add tests with RSpec.
+
 ## 0.6 (5/12/2015)
 
 - Fix issue #38 (issue transferring data over local mode proxy) (@shaneramey)
