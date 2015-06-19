@@ -3,8 +3,9 @@ require 'time'
 
 describe "chef-provisioning-docker" do
   extend DockerSupport
+  include DockerConfig
 
-  when_the_chef_12_server "exists", organization: "foo", server_scope: :context do
+  when_the_chef_12_server "exists", organization: "foo", server_scope: :context, port: 8900..9000 do
     with_docker "integration tests" do
 
       # owing to how RSpec works, things defined by let() are not accessible in the recipes we define inside
@@ -33,7 +34,6 @@ describe "chef-provisioning-docker" do
           tag = spec_image_tag
 
           expect_converge {
-            with_driver 'docker'
 
             machine_image tag do
               machine_options :docker_options => ubuntu_options
@@ -48,8 +48,6 @@ describe "chef-provisioning-docker" do
           tag = spec_image_tag
 
           expect_converge {
-            with_driver 'docker'
-
             machine_image tag do
               machine_options :docker_options => ubuntu_options
               action :create
@@ -66,7 +64,6 @@ describe "chef-provisioning-docker" do
         it ":destroy succeeds with a non-existent image" do
           tag = "bogus_image"
           expect_converge {
-            with_driver 'docker'
             machine_image tag do
               action :destroy
             end
