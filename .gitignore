@@ -1,3 +1,5 @@
+.vagrant
+Berksfile.lock
 *.gem
 *.rbc
 .bundle
@@ -28,3 +30,4 @@ docs/examples/nodes
 docs/examples/data_bags
 x.rb
 .idea/
+.kitchen/*
