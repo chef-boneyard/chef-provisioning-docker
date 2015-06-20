@@ -12,117 +12,38 @@ class Chef
 module Provisioning
 module DockerDriver
   class DockerTransport < Chef::Provisioning::Transport
-    def initialize(container_name, base_image_name, credentials, connection, tunnel_transport = nil)
-      @repository_name = 'chef'
-      @container_name = container_name
-      @image = Docker::Image.get(base_image_name, connection)
-      @credentials = credentials
-      @connection = connection
-      @tunnel_transport = tunnel_transport
+    def initialize(container, config)
+      @container = container
+      @config = config
     end
 
-    include Chef::Mixin::ShellOut
+    attr_reader :config
+    attr_accessor :container
 
-    attr_reader :container_name
-    attr_reader :repository_name
-    attr_reader :image
-    attr_reader :credentials
-    attr_reader :connection
-    attr_reader :tunnel_transport
-
-    # Execute the specified command inside the container, returns a Mixlib::Shellout object
-    # Options contains the optional keys:
-    #   :env => env vars
-    #   :read_only => Do not commit this execute operation, just execute it
-    #   :ports => ports to listen on (-p command-line options)
-    #   :detached => true/false, execute this command in detached mode (for final program to run)
     def execute(command, options={})
       Chef::Log.debug("execute '#{command}' with options #{options}")
 
-      begin
-        connection.post("/containers/#{container_name}/stop?t=0", '')
-        Chef::Log.debug("stopped /containers/#{container_name}")
-      rescue Excon::Errors::NotModified
-        Chef::Log.debug("Already stopped #{container_name}")
-      rescue Docker::Error::NotFoundError
-      end
-
-      begin
-        # Delete the container if it exists and is dormant
-        connection.delete("/containers/#{container_name}?v=true&force=true")
-        Chef::Log.debug("deleted /containers/#{container_name}")
-      rescue Docker::Error::NotFoundError
+      opts = {}
+      if options[:keep_stdin_open]
+        opts[:stdin] = true
       end
 
       command = Shellwords.split(command) if command.is_a?(String)
-
-      # TODO shell_out has no way to live stream stderr???
-      live_stream = nil
-      live_stream = STDOUT if options[:stream]
-      live_stream = options[:stream_stdout] if options[:stream_stdout]
-
-      args = ['docker', 'run', '--name', container_name]
-
-      if options[:env]
-        options[:env].each do |key, value|
-          args << '-e'
-          args << "#{key}=#{value}"
+      response = container.exec(command, opts) do |stream, chunk|
+        case stream
+        when :stdout
+          stream_chunk(options, chunk, nil)
+        when :stderr
+          stream_chunk(options, nil, chunk)
         end
       end
 
-      if options[:detached]
-        args << '--detach'
-      end
+      Chef::Log.debug("Execute complete: status #{response[2]}")
 
-      if options[:ports]
-        options[:ports].each do |portnum|
-          args << '-p'
-          args << "#{portnum}"
-        end
-      end
-
-      if options[:volumes]
-        options[:volumes].each do |volume|
-          args << '-v'
-          args << "#{volume}"
-        end
-      end
-
-      if options[:keep_stdin_open]
-        args << '-i'
-      end
-
-      args << @image.id
-      args += command
-
-      cmdstr = Shellwords.join(args)
-      Chef::Log.debug("Executing #{cmdstr}")
-
-      # Remove this when https://github.com/opscode/chef/pull/2100 gets merged and released
-      # nullify live_stream because at the moment EventsOutputStream doesn't understand <<, which
-      # ShellOut uses
-      live_stream = nil unless live_stream.respond_to? :<<
-
-      cmd = Mixlib::ShellOut.new(cmdstr, :live_stream => live_stream, :timeout => execute_timeout(options))
-
-      cmd.run_command
-
-      unless options[:read_only]
-        Chef::Log.debug("Committing #{container_name} as #{repository_name}:#{container_name}")
-        container = Docker::Container.get(container_name)
-        @image = container.commit('repo' => repository_name, 'tag' => container_name)
-      end
-
-      Chef::Log.debug("Execute complete: status #{cmd.exitstatus}")
-
-      cmd
+      DockerResult.new(command.join(' '), options, response[0].join, response[1].join, response[2])
     end
 
     def read_file(path)
-      container = Docker::Container.create({
-        'Image' => @image.id,
-        'Cmd' => %w(echo true)
-      }, connection)
       begin
         tarfile = ''
         # NOTE: this would be more efficient if we made it a stream and passed that to Minitar
@@ -135,8 +56,6 @@ module DockerDriver
         else
           raise
         end
-      ensure
-        container.delete
       end
 
       output = ''
@@ -153,12 +72,7 @@ module DockerDriver
     end
 
     def write_file(path, content)
-      # TODO hate tempfiles.  Find an in memory way.
-      Tempfile.open('metal_docker_write_file') do |file|
-        file.write(content)
-        file.close
-        @image = @image.insert_local('localPath' => file.path, 'outputPath' => path, 't' => "#{repository_name}:#{container_name}")
-      end
+      File.open(container_path(path), 'w') { |file| file.write(content) }
     end
 
     def download_file(path, local_path)
@@ -173,7 +87,7 @@ module DockerDriver
     end
 
     def upload_file(local_path, path)
-      @image = @image.insert_local('localPath' => local_path, 'outputPath' => path, 't' => "#{repository_name}:#{container_name}")
+      FileUtils.cp(local_path, container_path(path))
     end
 
     def make_url_available_to_remote(url)
@@ -236,40 +150,8 @@ module DockerDriver
       end
     end
 
-    # Copy of container.attach with timeout support and pipeline
-    def attach_with_timeout(container, read_timeout, options = {}, &block)
-      opts = {
-        :stream => true, :stdout => true, :stderr => true
-      }.merge(options)
-      # Creates list to store stdout and stderr messages
-      msgs = Docker::Messages.new
-      connection.start_request(
-        :post,
-        "/containers/#{container.id}/attach",
-        opts,
-        :response_block => attach_for(block, msgs),
-        :read_timeout => read_timeout,
-        :pipeline => true,
-        :persistent => true
-      )
-    end
-
-    # Method that takes chunks and calls the attached block for each mux'd message
-    def attach_for(block, msg_stack)
-      messages = Docker::Messages.new
-      lambda do |c,r,t|
-        messages = messages.decipher_messages(c)
-        msg_stack.append(messages)
-
-        unless block.nil?
-          messages.stdout_messages.each do |msg|
-            block.call(:stdout, msg)
-          end
-          messages.stderr_messages.each do |msg|
-            block.call(:stderr, msg)
-          end
-        end
-      end
+    def container_path(path)
+      File.join('proc', container.info['State']['Pid'].to_s, 'root', path)
     end
 
     class DockerResult
@@ -299,27 +181,4 @@ module DockerDriver
   end
 end
 end
-end
-
-class Docker::Connection
-  def start_request(method, *args, &block)
-    request = compile_request_params(method, *args, &block)
-    if Docker.logger
-      Docker.logger.debug(
-        [request[:method], request[:path], request[:query], request[:body]]
-      )
-    end
-    excon = resource
-    [ excon, excon.request(request) ]
-  rescue Excon::Errors::BadRequest => ex
-    raise ClientError, ex.message
-  rescue Excon::Errors::Unauthorized => ex
-    raise UnauthorizedError, ex.message
-  rescue Excon::Errors::NotFound => ex
-    raise NotFoundError, ex.message
-  rescue Excon::Errors::InternalServerError => ex
-    raise ServerError, ex.message
-  rescue Excon::Errors::Timeout => ex
-    raise TimeoutError, ex.message
-  end
 end
