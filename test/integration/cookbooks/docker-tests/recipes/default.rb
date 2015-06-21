@@ -35,7 +35,8 @@ end.run_action(:run)
 
 chef_gem 'chef-provisioning-docker' do
   source Dir[ '/opt/chef-provisioning-docker/*.gem' ].first
-  action :install
-end.run_action(:install)
+  clear_sources true
+  action [:remove, :install]
+end
 
 require 'chef/provisioning/docker_driver'
