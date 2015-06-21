@@ -70,9 +70,11 @@ module DockerDriver
       end
     end
 
-
     def allocate_machine(action_handler, machine_spec, machine_options)
-      machine_spec.from_image = action_handler.provider.new_resource.from_image
+      machine_spec.from_image = from_image_from_action_handler(
+        action_handler,
+        machine_spec
+      )
       docker_options = machine_options[:docker_options]
       container_id = nil
       image_id = machine_options[:image_id]
@@ -265,6 +267,17 @@ module DockerDriver
       machine_spec.reference['image_id'] = image.id if image
 
       image
+    end
+
+    def from_image_from_action_handler(action_handler, machine_spec)
+      case action_handler
+      when Chef::Provisioning::AddPrefixActionHandler
+        machines = action_handler.action_handler.provider.new_resource.machines
+        this_machine = machines.select { |m| m.name == machine_spec.name}.first
+        this_machine.from_image
+      else
+        action_handler.provider.new_resource.from_image
+      end
     end
 
     def driver_url
