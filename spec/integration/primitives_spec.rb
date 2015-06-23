@@ -18,12 +18,12 @@ describe "chef-provisioning-docker" do
           },
         }
 
-      let(:iso_date) { Time.now.iso8601.gsub(':', '') }
+      let(:timestamp) { Time.now.to_i }
       docker_driver = driver
 
       context "machine_image resource" do
 
-        let(:spec_image_tag) { "docker_image_spec_#{iso_date}" }
+        let(:spec_image_tag) { "docker_image_spec_#{timestamp}" }
 
         after(:each) {
           image = docker_driver.find_image("chef", spec_image_tag)
