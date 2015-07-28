@@ -72,8 +72,8 @@ This  supports the new machine image paradigm; with Docker you can build a base 
 ```ruby
 require 'chef/provisioning/docker_driver'
 
-machine_image 'web_server' do
-  recipe 'apache'
+machine_image 'ssh_server' do
+  recipe 'openssh'
 
   machine_options :docker_options => {
       :base_image => {
@@ -84,11 +84,12 @@ machine_image 'web_server' do
   }
 end
 
-machine 'web00' do
-  from_image 'web_server'
+machine 'ssh00' do
+  from_image 'ssh_server'
 
   machine_options :docker_options => {
-      :command => '/usr/sbin/httpd'
+      :command => '/usr/sbin/sshd -D -o UsePAM=no -o UsePrivilegeSeparation=no -o PidFile=/tmp/sshd.pid',
+      :ports => [22]
   }
 end
 ```
