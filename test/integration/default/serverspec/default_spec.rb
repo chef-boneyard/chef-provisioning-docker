@@ -44,8 +44,8 @@ describe 'containers and images' do
   describe 'ssh3' do
     let(:name) { 'ssh3' }
 
-    it 'has a running container' do
-      expect(container.info['State']['Running']).to be true
+    it 'has a stopped container' do
+      expect(container.info['State']['Running']).to be false
     end
     it 'has an image' do
       expect(image.id).to_not be nil
@@ -55,7 +55,7 @@ describe 'containers and images' do
   describe 'ssh port' do
     let(:container) { Docker::Container.get('ssh1') }
     let(:ip) { container.info['NetworkSettings']['IPAddress']}
-    let(:file) { Net::SSH.start(ip, 'vagrant', password: 'vagrant').exec!('sudo cat /etc/chef/client.rb') }
+    let(:file) { Net::SSH.start(ip, 'vagrant', password: 'vagrant').exec!('cat /etc/chef/client.rb') }
 
     it 'returns chef client file' do
       expect(file).to include 'ssh1'
