@@ -1,0 +1,8 @@
+sudo: false
+language: ruby
+rvm:
+- 2.1.2
+script: bundle exec rake build
+notifications:
+  slack:
+    secure: fe0zpCNfsuzpjcQJrPiG4hmCfc5sXYYw3BLSyKnFXl0ykUz9AOZ0VDz9PUoX8F/7GY0ro4H/pA3ozX2moNxKkcV+GGInmqOswBAzUuSFErQOuyD5nYPsIicLjSTP83Lr1FiXZQ4GL7YJ9fa9VJ9hIMpdN71500dFPInPqfQUhNk=

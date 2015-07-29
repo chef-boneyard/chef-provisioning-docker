@@ -9,29 +9,30 @@ module DockerDriver
     # Options is expected to contain the optional keys
     #   :command => the final command to execute
     #   :ports => a list of port numbers to listen on
-    def initialize(machine_spec, transport, convergence_strategy, opts = {})
+    def initialize(machine_spec, transport, convergence_strategy, command = nil)
       super(machine_spec, transport, convergence_strategy)
-      @env = opts[:env]
-      @command = opts[:command]
-      @ports = opts[:ports]
-      @volumes = opts[:volumes]
-      @keep_stdin_open = opts[:keep_stdin_open]
-      @container_name = machine_spec.location['container_name']
+      @command = command
       @transport = transport
-    end
-
-    def execute_always(command, options = {})
-      transport.execute(command, { :read_only => true }.merge(options))
     end
 
     def converge(action_handler)
       super action_handler
-      if @command
-        Chef::Log.debug("DockerContainerMachine converge complete, executing #{@command} in #{@container_name}")
-        @transport.execute(@command, :env => @env ,:detached => true, :read_only => true, :ports => @ports, :volumes => @volumes, :keep_stdin_open => @keep_stdin_open)
-      end
-    end
+      Chef::Log.debug("DockerContainerMachine converge complete, executing #{@command} in #{@container_name}")
+      image = transport.container.commit(
+        'repo' => 'chef',
+        'tag' => machine_spec.reference['container_name']
+      )
+      machine_spec.reference['image_id'] = image.id
 
+      if @command && transport.container.info['Config']['Cmd'].join(' ') != @command
+        transport.container.delete(:force => true)
+        container = image.run(Shellwords.split(@command))
+        container.rename(machine_spec.reference['container_name'])
+        machine_spec.reference['container_id'] = container.id
+        transport.container = container
+      end
+      machine_spec.save(action_handler)
+    end
   end
 end
 end
