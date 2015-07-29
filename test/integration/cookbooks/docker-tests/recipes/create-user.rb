@@ -1,3 +1,5 @@
+directory '/var/run/sshd'
+
 user 'vagrant' do
   action :create
   supports manage_home: true
