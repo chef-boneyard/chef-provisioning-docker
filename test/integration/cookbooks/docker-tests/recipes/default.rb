@@ -8,8 +8,6 @@ when 'ubuntu', 'debian'
     keyserver 'hkp://keyserver.ubuntu.com:80'
     key 'A88D21E9'
   end
-  package 'linux-headers-generic-lts-trusty'
-  package 'linux-image-generic-lts-trusty'
   package 'lxc-docker-1.6.0'
   package 'apparmor'
   package 'build-essential'
