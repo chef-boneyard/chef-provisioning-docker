@@ -1,0 +1,26 @@
+---
+driver:
+  name: vagrant
+  synced_folders:
+    - ['.', '/opt/chef-provisioning-docker']
+
+provisioner:
+  name: chef_zero
+
+platforms:
+- name: ubuntu-14.04
+  run_list:
+  - recipe[ubuntu]
+
+- name: centos-7.0
+  run_list:
+  - recipe[yum-epel]
+  driver_config:
+    box: box-cutter/centos70
+
+suites:
+- name: default
+  run_list:
+  - recipe[docker-tests]
+  - recipe[docker-tests::create-containers]
+  - recipe[docker-tests::change-container-state]
