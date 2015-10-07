@@ -91,7 +91,7 @@ module DockerDriver
         if execute("which ruby").exitstatus == 0
           res = execute("ruby -e \"require 'socket'; s = TCPSocket.new('#{ip}', #{port}); File.open('#{path}', 'w') { |f| f.write s.read }; s.close\"").exitstatus
         else
-          res = execute("sh -c 'nc -v -q1 #{ip} #{port} > #{path} 2>/tmp/nc_error'").exitstatus
+          res = execute("curl -o #{path} telnet://#{ip}:#{port}").exitstatus
         end
       end
       server.close
