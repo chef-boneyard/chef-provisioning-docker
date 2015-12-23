@@ -145,8 +145,10 @@ module DockerDriver
       end
 
       if docker_options[:dns]
-        args << '--dns'
-        args << "#{docker_options[:dns]}"
+        docker_options[:dns].each do |entry|
+          args << '--dns'
+          args << "#{entry}"
+        end
       end
 
       if docker_options[:dns_search]
