@@ -123,7 +123,7 @@ module DockerDriver
         args << '-i'
       end
 
-      if docker_options[:env]      
+      if docker_options[:env]
         docker_options[:env].each do |key, value|
           args << '-e'
           args << "#{key}=#{value}"
@@ -142,6 +142,16 @@ module DockerDriver
           args << '-v'
           args << "#{volume}"
         end
+      end
+
+      if docker_options[:dns]
+        args << '--dns'
+        args << "#{docker_options[:dns]}"
+      end
+
+      if docker_options[:dns_search]
+        args << '--dns-search'
+        args << "#{docker_options[:dns_search]}"
       end
 
       args << image.id
@@ -173,7 +183,7 @@ module DockerDriver
         'repo' => source_repository,
         'tag' => source_tag
       )
-      
+
       Chef::Log.debug("Allocated #{image}")
       image.tag('repo' => 'chef', 'tag' => target_tag)
       Chef::Log.debug("Tagged image #{image}")
