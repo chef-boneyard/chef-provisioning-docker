@@ -1,3 +1,4 @@
+bin/
 .vagrant
 Berksfile.lock
 *.gem
