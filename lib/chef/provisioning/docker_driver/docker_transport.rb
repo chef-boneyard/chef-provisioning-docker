@@ -112,6 +112,14 @@ module DockerDriver
                        $1
                      end
 
+           uri.host = if using_docker_toolkit?
+                        # Intermediate VM does NAT, so local address should be fine here
+                        Chef::Log.debug("Using Docker ToolKit!")
+                        Socket.getaddrinfo(Socket.gethostname, nil).first[2]
+                      else
+                        $1
+                      end
+
           if !@proxy_thread
             # Listen to docker instances only, and forward to localhost
             @proxy_thread = Thread.new do
@@ -144,6 +152,18 @@ module DockerDriver
       Sys::ProcTable.ps do |proc|
         if proc.respond_to?(:cmdline)
           if proc.send(:cmdline).to_s =~ /.*--comment boot2docker.*/
+            return true
+          end
+        end
+      end
+    end
+
+    # docker_toolkit introduces an intermediate VM so we need to use a slightly different
+    # mechanism for getting to the running chef-zero
+    def using_docker_toolkit?
+      Sys::ProcTable.ps do |proc|
+        if proc.respond_to?(:cmdline)
+          if proc.send(:cmdline).to_s =~ /.*--comment default.*/
             return true
           end
         end
