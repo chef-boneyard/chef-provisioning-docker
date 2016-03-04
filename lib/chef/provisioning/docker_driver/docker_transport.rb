@@ -72,7 +72,29 @@ module DockerDriver
     end
 
     def write_file(path, content)
-      File.open(container_path(path), 'w') { |file| file.write(content) }
+      server = Socket.new(:INET, :STREAM, 0)
+      ip = Socket.ip_address_list.detect{|intf| intf.ipv4_private?}
+      ip = ip.ip_address if ip
+      server.bind(Addrinfo.tcp(ip, 0))
+      port = server.local_address.ip_port
+      server.close
+      server = TCPServer.new(port)
+      Thread.new do
+        client = server.accept
+        client.print content
+        client.flush
+        client.close
+      end
+      execute "mkdir -p #{File.dirname path}"
+      res = 1
+      while res != 0
+        if execute("which ruby").exitstatus == 0
+          res = execute("ruby -e \"require 'socket'; s = TCPSocket.new('#{ip}', #{port}); File.open('#{path}', 'w') { |f| f.write s.read }; s.close\"").exitstatus
+        else
+          res = execute("sh -c 'nc -v -q1 #{ip} #{port} > #{path} 2>/tmp/nc_error'").exitstatus
+        end
+      end
+      server.close
     end
 
     def download_file(path, local_path)
@@ -87,7 +109,7 @@ module DockerDriver
     end
 
     def upload_file(local_path, path)
-      FileUtils.cp(local_path, container_path(path))
+      write_file(path, File.read(local_path))
     end
 
     def make_url_available_to_remote(url)
