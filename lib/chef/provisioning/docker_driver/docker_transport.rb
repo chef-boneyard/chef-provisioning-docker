@@ -87,7 +87,11 @@ module DockerDriver
     end
 
     def upload_file(local_path, path)
-      FileUtils.cp(local_path, container_path(path))
+      dir = File.dirname(path)
+      localfile = File.basename(local_path)
+      execute(['mkdir','-p',dir])
+      container.archive_in(local_path, dir, overwrite: true)
+      execute(['mv',dir+"/"+localfile,path])
     end
 
     def make_url_available_to_remote(url)
