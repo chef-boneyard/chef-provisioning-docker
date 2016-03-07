@@ -123,6 +123,12 @@ module DockerDriver
         args << '-i'
       end
 
+      # We create the initial container with --net host so it can access things
+      # while it converges. When the final container starts, it will have its
+      # normal network.
+      args << '--net'
+      args << 'host'
+
       if docker_options[:env]
         docker_options[:env].each do |key, value|
           args << '-e'
@@ -157,7 +163,7 @@ module DockerDriver
       end
 
       args << image.id
-      args += Shellwords.split("/bin/sh -c 'while true;do sleep 1; done'")
+      args += Shellwords.split("/bin/sh -c 'while true;do sleep 1000; done'")
 
       cmdstr = Shellwords.join(args)
       Chef::Log.debug("Executing #{cmdstr}")
