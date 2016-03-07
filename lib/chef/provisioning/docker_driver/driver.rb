@@ -93,7 +93,7 @@ module DockerDriver
         'host_node' => action_handler.host_node,
         'container_name' => container_name,
         'image_id' => image_id,
-        'docker_options' => docker_options,
+        'docker_options' => stringize_keys(docker_options),
         'container_id' => container_id
       }
       build_container(machine_spec, docker_options)
@@ -344,6 +344,13 @@ module DockerDriver
       Chef::Log.debug("Looking for image #{machine_spec.from_image}")
       image_spec = machine_spec.managed_entry_store.get!(:machine_image, machine_spec.from_image)
       Mash.new(image_spec.reference)[:docker_options][:base_image]
+    end
+
+    def stringize_keys(hash)
+      hash.each_with_object({}) do |(k,v),hash|
+        v = stringize_keys(v) if v.is_a?(Hash)
+        hash[k.to_s] = v
+      end
     end
   end
 end
