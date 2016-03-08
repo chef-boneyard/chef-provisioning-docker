@@ -1,4 +1,5 @@
 require 'chef/provisioning/transport'
+require 'chef/provisioning/transport/ssh'
 require 'docker'
 require 'archive/tar/minitar'
 require 'shellwords'
@@ -6,7 +7,7 @@ require 'uri'
 require 'socket'
 require 'mixlib/shellout'
 require 'sys/proctable'
-require 'chef/provisioning/docker_driver/chef_zero_http_proxy'
+require 'tempfile'
 
 class Chef
 module Provisioning
@@ -21,14 +22,13 @@ module DockerDriver
     attr_accessor :container
 
     def execute(command, options={})
-      Chef::Log.debug("execute '#{command}' with options #{options}")
-
       opts = {}
       if options[:keep_stdin_open]
         opts[:stdin] = true
       end
 
       command = Shellwords.split(command) if command.is_a?(String)
+      Chef::Log.debug("execute #{command.inspect} on container #{container.id} with options #{opts}'")
       response = container.exec(command, opts) do |stream, chunk|
         case stream
         when :stdout
@@ -47,9 +47,11 @@ module DockerDriver
       begin
         tarfile = ''
         # NOTE: this would be more efficient if we made it a stream and passed that to Minitar
-        container.copy(path) do |block|
+        container.archive_out(path) do |block|
           tarfile << block
         end
+      rescue Docker::Error::NotFoundError
+        return nil
       rescue Docker::Error::ServerError
         if $!.message =~ /500/ || $!.message =~ /Could not find the file/
           return nil
@@ -72,11 +74,11 @@ module DockerDriver
     end
 
     def write_file(path, content)
-      File.open(container_path(path), 'w') { |file| file.write(content) }
+      tar = StringIO.new(Docker::Util.create_tar(path => content))
+      container.archive_in_stream('/') { tar.read }
     end
 
     def download_file(path, local_path)
-      # TODO stream
       file = File.open(local_path, 'w')
       begin
         file.write(read_file(path))
@@ -87,50 +89,52 @@ module DockerDriver
     end
 
     def upload_file(local_path, path)
-      FileUtils.cp(local_path, container_path(path))
+      write_file(path, IO.read(local_path))
     end
 
-    def make_url_available_to_remote(url)
-      # The host is already open to the container.  Just find out its address and return it!
-      uri = URI(url)
-      uri.scheme = 'http' if 'chefzero' == uri.scheme && uri.host == 'localhost'
-      host = Socket.getaddrinfo(uri.host, uri.scheme, nil, :STREAM)[0][3]
-      Chef::Log.debug("Making URL available: #{host}")
+    def make_url_available_to_remote(local_url)
+      uri = URI(local_url)
 
-      if host == '127.0.0.1' || host == '::1'
-        result = execute('ip route list', :read_only => true)
+      if uri.scheme == "chefzero" || is_local_machine(uri.host)
+        # chefzero: URLs are just http URLs with a shortcut if you are in-process.
+        # The remote machine is definitely not in-process.
+        uri.scheme = "http" if uri.scheme == "chefzero"
 
-        Chef::Log.debug("IP route: #{result.stdout}")
-
-        if result.stdout =~ /default via (\S+)/
-
-          uri.host = if using_boot2docker?
-                       # Intermediate VM does NAT, so local address should be fine here
-                       Chef::Log.debug("Using boot2docker!")
-                       IPSocket.getaddress(Socket.gethostname)
-                     else
-                       $1
-                     end
-
-          if !@proxy_thread
-            # Listen to docker instances only, and forward to localhost
-            @proxy_thread = Thread.new do
-              Chef::Log.debug("Starting proxy thread: #{uri.host}:#{uri.port} <--> #{host}:#{uri.port}")
-              ChefZeroHttpProxy.new(uri.host, uri.port, host, uri.port).run
+        if docker_toolkit_transport
+          # Forward localhost on docker_machine -> chef-zero. The container will
+          # be able to access this because it was started with --net=host.
+          uri = docker_toolkit_transport.make_url_available_to_remote(uri.to_s)
+          uri = URI(uri)
+          @docker_toolkit_transport_thread ||= Thread.new do
+            begin
+              docker_toolkit_transport.send(:session).loop { true }
+            rescue
+              Chef::Log.error("SSH forwarding loop failed: #{$!}")
+              raise
             end
+            Chef::Log.debug("Session loop completed normally")
           end
-          Chef::Log.debug("Using Chef server URL: #{uri.to_s}")
-
-          return uri.to_s
         else
-          raise "Cannot forward port: ip route ls did not show default in expected format.\nSTDOUT: #{result.stdout}"
+          # We are the host. The docker machine was run with --net=host, so it
+          # will be able to talk to us automatically.
         end
+      else
+        old_uri = uri.dup
+        # Find out our external network address of the URL and report it
+        # to the container in case it has no DNS (often the case).
+        uri.scheme = 'http' if 'chefzero' == uri.scheme && uri.host == 'localhost'
+        uri.host = Socket.getaddrinfo(uri.host, uri.scheme, nil, :STREAM)[0][3]
+        Chef::Log.debug("Looked up IP address of #{old_uri} and modified URL to point at it: #{uri}")
       end
-      url
+
+      uri.to_s
     end
 
     def disconnect
-      @proxy_thread.kill if @proxy_thread
+      if @docker_toolkit_transport_thread
+        @docker_toolkit_transport_thread.kill
+        @docker_toolkit_transport_thread = nil
+      end
     end
 
     def available?
@@ -138,20 +142,57 @@ module DockerDriver
 
     private
 
-    # boot2docker introduces an intermediate VM so we need to use a slightly different
-    # mechanism for getting to the running chef-zero
-    def using_boot2docker?
-      Sys::ProcTable.ps do |proc|
-        if proc.respond_to?(:cmdline)
-          if proc.send(:cmdline).to_s =~ /.*--comment boot2docker.*/
-            return true
-          end
+    def is_local_machine(host)
+      local_addrs = Socket.ip_address_list
+      host_addrs = Addrinfo.getaddrinfo(host, nil)
+      local_addrs.any? do |local_addr|
+        host_addrs.any? do |host_addr|
+          local_addr.ip_address == host_addr.ip_address
         end
       end
     end
 
-    def container_path(path)
-      File.join('proc', container.info['State']['Pid'].to_s, 'root', path)
+    def docker_toolkit_transport
+      if !defined?(@docker_toolkit_transport)
+        # Figure out which docker-machine this container is in
+        begin
+          docker_machines = `docker-machine ls --format "{{.Name}},{{.URL}}"`
+        rescue Errno::ENOENT
+          Chef::Log.debug("docker-machine ls returned ENOENT: Docker Toolkit is presumably not installed.")
+          @docker_toolkit_transport = nil
+          return
+        end
+        Chef::Log.debug("Found docker machines:")
+        docker_machine = nil
+        docker_machines.lines.each do |line|
+          machine_name, machine_url = line.chomp.split(',', 2)
+          Chef::Log.debug("- #{machine_name} at URL #{machine_url.inspect}")
+          if machine_url == container.connection.url
+            Chef::Log.debug("Docker machine #{machine_name} at URL #{machine_url} matches the container's URL #{container.connection.url}! Will use it for port forwarding.")
+            docker_machine = machine_name
+          end
+        end
+        if !docker_machine
+          Chef::Log.debug("Docker Toolkit is installed, but no Docker machine's URL matches #{container.connection.url.inspect}. Assuming docker must be installed as well ...")
+          @docker_toolkit_transport = nil
+          return
+        end
+
+        # Get the SSH information for the docker-machine
+        docker_toolkit_json = `docker-machine inspect #{docker_machine}`
+        machine_info = JSON.parse(docker_toolkit_json, create_additions: false)["Driver"]
+        ssh_host = machine_info["IPAddress"]
+        ssh_username = machine_info["SSHUser"]
+        ssh_options = {
+          # port: machine_info["SSHPort"], seems to be bad information (44930???)
+          keys: [ machine_info["SSHKeyPath"] ],
+          keys_only: true
+        }
+
+        Chef::Log.debug("Docker Toolkit is installed. Will use SSH transport with docker-machine #{docker_machine.inspect} to perform port forwarding.")
+        @docker_toolkit_transport = Chef::Provisioning::Transport::SSH.new(ssh_host, ssh_username, ssh_options, {}, Chef::Config)
+      end
+      @docker_toolkit_transport
     end
 
     class DockerResult
