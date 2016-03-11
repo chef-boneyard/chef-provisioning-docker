@@ -1,7 +1,7 @@
 class Chef
 module Provisioning
 module DockerDriver
-  VERSION = '0.8.0'
+  VERSION = '1.0.0.beta.1'
 end
 end
 end
