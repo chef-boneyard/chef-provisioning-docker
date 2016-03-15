@@ -498,7 +498,7 @@ class DockerRunOptions
     value.each do |ulimit|
       type, values = ulimit.split("=", 2)
       soft, hard = values.split(":", 2)
-      config["HostConfig"]["Ulimits"] << { "Name": type, "Soft": soft, "Hard": hard }
+      config["HostConfig"]["Ulimits"] << { "Name" => type, "Soft" => soft, "Hard" => hard }
     end
   end
   #   --uts=""                      UTS namespace to use

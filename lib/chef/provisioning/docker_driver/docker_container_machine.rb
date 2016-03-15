@@ -115,6 +115,8 @@ module DockerDriver
         config['HostConfig'].delete('ExtraHosts')
         config.delete('NetworkSettings')
       end
+      # Don't use any resources that need to be shared (such as exposed ports)
+      config.delete('ExposedPorts')
 
       Chef::Log.debug("Creating converge container with config #{config} ...")
       action_handler.perform_action "create container to converge #{machine_spec.name}" do

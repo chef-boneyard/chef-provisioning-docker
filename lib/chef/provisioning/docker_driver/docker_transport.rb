@@ -169,12 +169,12 @@ module DockerDriver
           machine_name, machine_url = line.chomp.split(',', 2)
           Chef::Log.debug("- #{machine_name} at URL #{machine_url.inspect}")
           if machine_url == container.connection.url
-            Chef::Log.debug("Docker machine #{machine_name} at URL #{machine_url} matches the container's URL #{container.connection.url}! Will use it for port forwarding.")
+            Chef::Log.debug("Docker machine #{machine_name} at URL #{machine_url} matches the container's URL #{connection_url}! Will use it for port forwarding.")
             docker_machine = machine_name
           end
         end
         if !docker_machine
-          Chef::Log.debug("Docker Toolkit is installed, but no Docker machine's URL matches #{container.connection.url.inspect}. Assuming docker must be installed as well ...")
+          Chef::Log.debug("Docker Toolkit is installed, but no Docker machine's URL matches #{connection_url.inspect}. Assuming docker must be installed as well ...")
           @docker_toolkit_transport = nil
           return
         end
