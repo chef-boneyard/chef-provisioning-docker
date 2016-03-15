@@ -228,9 +228,13 @@ class DockerRunOptions
       elsif option[:type].is_a?(String)
         # If it's A:B:C, translate [ "a:b:c", "d:e:f" ] -> [ { "A" => "a", "B" => "b", "C" => "c" }, { "A" => "d", "B" => "e", "C" => "f" } ]
         names = option[:type].split(":")
-        Array(value).map do |item|
-          item_values = item.split(":", names.size)
-          item = Hash[names.zip(item_values)]
+        if names.size == 2 && value.is_a?(Hash)
+          value.map { |key,value| { names[0] => key, names[1] => value } }
+        else
+          Array(value).map do |item|
+            item_values = item.split(":", names.size)
+            item = Hash[names.zip(item_values)]
+          end
         end
       end
 
@@ -290,11 +294,11 @@ class DockerRunOptions
     end
   end
   #   --add-host=[]                 Add a custom host-to-IP mapping (host:ip)
-  cli_option :add_host, Array,      api: "HostConfig/ExtraHosts"
+  cli_option :add_host, Array,      api: "HostConfig/ExtraHosts", aliases: :add_hosts
   #   --blkio-weight=0              Block IO weight (relative weight)
   cli_option :blkio_weight,         api: "HostConfig/BlkioWeight"
   #   --blkio-weight-device=[]      Block IO weight (relative device weight, format: `DEVICE_NAME:WEIGHT`)
-  cli_option :blkio_weight, Array,  api: "HostConfig/BlkioWeightDevice"
+  cli_option :blkio_weight, Array,  api: "HostConfig/BlkioWeightDevice", aliases: :blkio_weights
   #   --cap-add=[]                  Add Linux capabilities
   cli_option :cap_add, Array,       api: "HostConfig/CapAdd"
   #   --cap-drop=[]                 Drop Linux capabilities
@@ -314,7 +318,7 @@ class DockerRunOptions
   #   --cpuset-mems=""              Memory nodes (MEMs) in which to allow execution (0-3, 0,1)
   cli_option :cpuset_mems,          api: "HostConfig/CpusetMems"
   #   --device=[]                   Add a host device to the container
-  cli_option :device, "PathOnHost:PathInContainer", api: "HostConfig/Devices"
+  cli_option :device, "PathOnHost:PathInContainer", api: "HostConfig/Devices", aliases: :devices
   #   --device-read-bps=[]          Limit read rate (bytes per second) from a device (e.g., --device-read-bps=/dev/sda:1mb)
   cli_option :device_read_bps, "Path:Rate", api: "HostConfig/BlkioDeviceReadBps"
   #   --device-read-iops=[]         Limit read rate (IO per second) from a device (e.g., --device-read-iops=/dev/sda:1000)
@@ -326,7 +330,7 @@ class DockerRunOptions
   #   --dns=[]                      Set custom DNS servers
   cli_option :dns, Array,          api: "HostConfig/Dns"
   #   --dns-opt=[]                  Set custom DNS options
-  cli_option :dns_opt, Array,      api: "HostConfig/DnsOptions"
+  cli_option :dns_opt, Array,      api: "HostConfig/DnsOptions", aliases: :dns_opts
   #   --dns-search=[]               Set custom DNS search domains
   cli_option :dns_search, Array,   api: "HostConfig/DnsSearch"
   #   --entrypoint=""               Overwrite the default ENTRYPOINT of the image
@@ -361,7 +365,7 @@ class DockerRunOptions
   cli_option :ip do |config, value|
     # Where this goes depends on the network! TODO doesn't work with `--net`
     config["NetworkSettings"] ||= {}
-    network = config["NetworkMode"] || "bridge"
+    network = config["NetworkMode"] || "default"
     config["NetworkSettings"][network] ||= {}
     config["NetworkSettings"][network]["IPAMConfig"] ||= {}
     config["NetworkSettings"][network]["IPAMConfig"]["IPv4Address"] = value
@@ -370,7 +374,7 @@ class DockerRunOptions
   cli_option :ip6 do |config, value|
     # Where this goes depends on the network! TODO doesn't work with `--net`
     config["NetworkSettings"] ||= {}
-    network = config["NetworkMode"] || "bridge"
+    network = config["NetworkMode"] || "default"
     config["NetworkSettings"][network] ||= {}
     config["NetworkSettings"][network]["IPAMConfig"] ||= {}
     config["NetworkSettings"][network]["IPAMConfig"]["IPv6Address"] = value
@@ -385,13 +389,13 @@ class DockerRunOptions
   #   --kernel-memory=""            Kernel memory limit
   cli_option :kernel_memory, Integer, api: 'KernelMemory'
   #   -l, --label=[]                Set metadata on the container (e.g., --label=com.example.key=value)
-  cli_option :label, Array,        api: "Labels", aliases: :l
+  cli_option :label, Array,        api: "Labels", aliases: [ :l, :labels ]
   #   --link=[]                     Add link to another container
-  cli_option :link, Array,         api: "HostConfig/Links"
+  cli_option :link, Array,         api: "HostConfig/Links", aliases: :links
   #   --log-driver=""               Logging driver for container
   cli_option :log_driver,          api: "HostConfig/LogConfig/Type"
   #   --log-opt=[]                  Log driver specific options
-  cli_option :log_opt do |config, value|
+  cli_option :log_opt, aliases: :log_opts do |config, value|
     config["HostConfig"] ||= {}
     config["HostConfig"]["LogConfig"] ||= {}
     config["HostConfig"]["LogConfig"]["Type"] ||= {}
@@ -418,7 +422,7 @@ class DockerRunOptions
   #                                 '<network-name>|<network-id>': connect to a user-defined network
   cli_option :net do |config, value|
     value = value.to_s
-    old_network = config["NetworkMode"] || "bridge"
+    old_network = config["NetworkMode"] || "default"
     config["NetworkMode"] = value
     # If we already stored stuff in the default network, move it to the new network
     if config["NetworkSettings"] && config["NetworkSettings"][old_network]
@@ -426,10 +430,10 @@ class DockerRunOptions
     end
   end
   #   --net-alias=[]                Add network-scoped alias for the container
-  cli_option :net_alias do |config, value|
+  cli_option :net_alias, aliases: :net_aliases do |config, value|
     # Where this goes depends on the network! TODO doesn't work with `--net`
     config["NetworkSettings"] ||= {}
-    network = config["NetworkMode"] || "bridge"
+    network = config["NetworkMode"] || "default"
     config["NetworkSettings"][network] ||= {}
     config["NetworkSettings"][network]["Aliases"] ||= []
     config["NetworkSettings"][network]["Aliases"] += Array(value)
@@ -478,9 +482,9 @@ class DockerRunOptions
   #   --rm                          Automatically remove the container when it exits
   cli_option :rm, :boolean,        api: "HostConfig/AutoRemove"
   #   --shm-size=[]                 Size of `/dev/shm`. The format is `<number><unit>`. `number` must be greater than `0`.  Unit is optional and can be `b` (bytes), `k` (kilobytes), `m` (megabytes), or `g` (gigabytes). If you omit the unit, the system uses bytes. If you omit the size entirely, the system uses `64m`.
-  cli_option :shm_size, Integer,   api: "HostConfig/ShmSize"
+  cli_option :shm_size, Integer,   api: "HostConfig/ShmSize", aliases: :shm_sizes
   #   --security-opt=[]             Security Options
-  cli_option :security_opt, Array, api: "HostConfig/SecurityOpt"
+  cli_option :security_opt, Array, api: "HostConfig/SecurityOpt", aliases: :security_opts
   #   --stop-signal="SIGTERM"       Signal to stop a container
   cli_option :stop_signal,         api: "StopSignal"
   #   -t, --tty                     Allocate a pseudo-TTY
@@ -488,7 +492,7 @@ class DockerRunOptions
   #   -u, --user=""                 Username or UID (format: <name|uid>[:<group|gid>])
   cli_option :user,                api: "User", aliases: :u
   #   --ulimit=[]                   Ulimit options
-  cli_option :ulimit do |config, value|
+  cli_option :ulimit, aliases: :ulimits do |config, value|
     config["HostConfig"] ||= {}
     config["HostConfig"]["Ulimits"] ||= []
     value.each do |ulimit|
@@ -537,7 +541,7 @@ class DockerRunOptions
 
   # Lifted from docker cookbook
   def self.parse_port(v)
-    parts = v.split(':')
+    parts = v.to_s.split(':')
     case parts.length
     when 3
       host_ip = parts[0]
