@@ -104,12 +104,17 @@ module DockerDriver
         'name' => "chef-converge.#{machine_spec.reference['container_name']}",
         'Cmd' => [ "/bin/sh", "-c", "while true;do sleep 1000; done" ],
       )
-      config['HostConfig'] ||= {}
-      config['HostConfig'].merge!('NetworkMode' => 'host')
-      # These are incompatible with NetworkMode: host
-      config['HostConfig'].delete('Links')
-      config['HostConfig'].delete('ExtraHosts')
-      config.delete('NetworkSettings')
+      # If we're using Docker Toolkit, we need to use host networking for the converge
+      # so we can open up the port we need. Don't force it in other cases, though.
+      if transport.is_local_machine(URI(transport.config[:chef_server_url]).host) &&
+         transport.docker_toolkit_transport(@connection.url)
+        config['HostConfig'] ||= {}
+        config['HostConfig'].merge!('NetworkMode' => 'host')
+        # These are incompatible with NetworkMode: host
+        config['HostConfig'].delete('Links')
+        config['HostConfig'].delete('ExtraHosts')
+        config.delete('NetworkSettings')
+      end
 
       Chef::Log.debug("Creating converge container with config #{config} ...")
       action_handler.perform_action "create container to converge #{machine_spec.name}" do

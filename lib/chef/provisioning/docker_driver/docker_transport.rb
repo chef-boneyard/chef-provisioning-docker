@@ -140,8 +140,6 @@ module DockerDriver
     def available?
     end
 
-    private
-
     def is_local_machine(host)
       local_addrs = Socket.ip_address_list
       host_addrs = Addrinfo.getaddrinfo(host, nil)
@@ -152,7 +150,7 @@ module DockerDriver
       end
     end
 
-    def docker_toolkit_transport
+    def docker_toolkit_transport(connection_url=nil)
       if !defined?(@docker_toolkit_transport)
         # Figure out which docker-machine this container is in
         begin
@@ -162,6 +160,9 @@ module DockerDriver
           @docker_toolkit_transport = nil
           return
         end
+
+        connection_url ||= container.connection.url
+
         Chef::Log.debug("Found docker machines:")
         docker_machine = nil
         docker_machines.lines.each do |line|
