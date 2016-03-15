@@ -1,23 +1,15 @@
 case node.platform_family
 when 'ubuntu', 'debian'
-  package 'apt-transport-https'
-  apt_repository 'docker' do
-    uri 'https://get.docker.io/ubuntu'
-    distribution 'docker'
-    components ['main']
-    keyserver 'hkp://keyserver.ubuntu.com:80'
-    key 'A88D21E9'
-  end
-  package 'lxc-docker-1.6.0'
-  package 'apparmor'
-  package 'build-essential'
+  include_recipe 'ubuntu'
+  include_recipe 'apt-docker'
 when 'rhel'
-  package 'docker'
-  package 'gcc'  
+  include_recipe 'yum-epel'
+  include_recipe 'yum-docker'
 end
 
-service 'docker' do
-  action :start
+docker_installation_package 'default' do
+  version '1.10.2'
+  action :create
 end
 
 ENV['CHEF_DRIVER'] = 'docker'

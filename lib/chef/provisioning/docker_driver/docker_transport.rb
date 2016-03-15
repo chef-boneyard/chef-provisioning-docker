@@ -1,5 +1,6 @@
 require 'chef/provisioning/transport'
 require 'chef/provisioning/transport/ssh'
+require 'chef/provisioning/docker_driver/chef_zero_http_proxy'
 require 'docker'
 require 'archive/tar/minitar'
 require 'shellwords'
@@ -115,8 +116,34 @@ module DockerDriver
             Chef::Log.debug("Session loop completed normally")
           end
         else
-          # We are the host. The docker machine was run with --net=host, so it
-          # will be able to talk to us automatically.
+          # We are the host. Find the docker machine's gateway (us) and talk to that;
+          # and set up a little proxy that will forward the container's requests to
+          # chef-zero
+          result = execute('ip route list', :read_only => true)
+
+          Chef::Log.debug("IP route: #{result.stdout}")
+
+          if result.stdout =~ /default via (\S+)/
+
+            old_uri = uri.dup
+
+            uri.host = $1
+
+            if !@proxy_thread
+              # Listen to docker instances only, and forward to localhost
+              @proxy_thread = Thread.new do
+                begin
+                  Chef::Log.debug("Starting proxy thread: #{old_uri.host}:#{old_uri.port} <--> #{uri.host}:#{uri.port}")
+                  ChefZeroHttpProxy.new(uri.host, uri.port, old_uri.host, old_uri.port).run
+                rescue
+                  Chef::Log.error("Proxy thread unable to start: #{$!}")
+                end
+              end
+            end
+          else
+            raise "Cannot forward port: ip route ls did not show default in expected format.\nSTDOUT: #{result.stdout}"
+          end
+
         end
       else
         old_uri = uri.dup
