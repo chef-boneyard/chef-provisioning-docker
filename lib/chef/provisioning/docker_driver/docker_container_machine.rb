@@ -57,7 +57,7 @@ module DockerDriver
 
     private
 
-    def container_config(docker_options)
+    def container_config(action_handler, docker_options)
       # We're going to delete things to make it easier on ourselves, back it up
       docker_options = docker_options.dup
 
@@ -65,7 +65,7 @@ module DockerDriver
       config = stringize_keys(docker_options.delete('container_config') || {})
 
       # Respect :base_image
-      image = base_image(docker_options.delete('base_image'))
+      image = base_image(action_handler, docker_options.delete('base_image'))
       config['Image'] = image if image
 
       # Respect everything else
@@ -99,7 +99,7 @@ module DockerDriver
 
       # Create a chef-capable container (just like the final one, but with --net=host
       # and a command that keeps it open). Base it on the image.
-      config = container_config(machine_spec.reference['docker_options'])
+      config = container_config(action_handler, machine_spec.reference['docker_options'])
       config.merge!(
         'name' => "chef-converge.#{machine_spec.reference['container_name']}",
         'Cmd' => [ "/bin/sh", "-c", "while true;do sleep 1000; done" ],
@@ -128,8 +128,9 @@ module DockerDriver
       action_handler.perform_action "create image from converged container for #{machine_spec.name}" do
         converged_image = converge_container.commit
       end
-      action_handler.perform_action "delete chef-converge container chef-converge.#{machine_spec.name} now that converge is complete" do
-        converge_container.delete(force: true)
+      action_handler.perform_action "stop and delete chef-converge container chef-converge.#{machine_spec.name} now that converge is complete" do
+        converge_container.stop!
+        converge_container.delete
       end
       converged_image
     end
@@ -145,13 +146,14 @@ module DockerDriver
         else
           # If the container exists but is based on an old image, destroy it.
           action_handler.perform_action "stop and delete running container for #{machine_spec.name}" do
-            container.delete(force: true)
+            container.stop!
+            container.delete
           end
         end
       end
 
       # Create the new container
-      config = container_config(machine_spec.reference['docker_options'])
+      config = container_config(action_handler, machine_spec.reference['docker_options'])
       config.merge!(
         'name' => machine_spec.reference['container_name'],
         'Image' => converged_image.id
@@ -171,13 +173,12 @@ module DockerDriver
       end
     end
 
-    def base_image(base_image_value)
+    def base_image(action_handler, base_image_value)
       case base_image_value
       when Hash
         params = base_image_value.dup
         if !params['fromImage']
           params['fromImage'] = params.delete('name')
-          params['fromImage'] = "#{params.delete('repository')}/#{params['fromImage']}" if params['repository']
           params['fromImage'] = "#{params['fromImage']}:#{params.delete('tag')}" if params['tag']
         end
       when String

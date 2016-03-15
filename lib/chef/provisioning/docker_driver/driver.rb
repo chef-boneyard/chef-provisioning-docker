@@ -127,8 +127,9 @@ module DockerDriver
       container = container_for(machine_spec)
       if container
         image_id = container.info['Image']
-        action_handler.perform_action "destroy container #{machine_spec.name}" do
-          container.delete(force: true)
+        action_handler.perform_action "stop and destroy container #{machine_spec.name}" do
+          container.stop
+          container.delete
         end
 
         if image_id && !machine_spec.attrs[:keep_image] && !machine_options[:keep_image]
