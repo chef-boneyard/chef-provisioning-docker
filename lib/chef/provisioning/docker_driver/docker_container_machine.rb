@@ -106,7 +106,10 @@ module DockerDriver
       )
       config['HostConfig'] ||= {}
       config['HostConfig'].merge!('NetworkMode' => 'host')
+      # These are incompatible with NetworkMode: host
       config['HostConfig'].delete('Links')
+      config['HostConfig'].delete('ExtraHosts')
+      config.delete('NetworkSettings')
 
       Chef::Log.debug("Creating converge container with config #{config} ...")
       action_handler.perform_action "create container to converge #{machine_spec.name}" do
