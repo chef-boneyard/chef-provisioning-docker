@@ -27,6 +27,10 @@ module DockerDriver
         opts[:stdin] = true
       end
 
+      if options[:read_timeout]
+        Docker.options[:read_timeout] = options[:read_timeout]
+      end
+
       command = Shellwords.split(command) if command.is_a?(String)
       Chef::Log.debug("execute #{command.inspect} on container #{container.id} with options #{opts}'")
       response = container.exec(command, opts) do |stream, chunk|
