@@ -9,9 +9,7 @@ provisioner:
 
 platforms:
 - name: ubuntu-14.04
-- name: centos-7.0
-  driver_config:
-    box: box-cutter/centos70
+- name: centos-7.1
 
 suites:
 - name: default

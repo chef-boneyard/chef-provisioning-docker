@@ -7,9 +7,8 @@ when 'rhel'
   include_recipe 'yum-docker'
 end
 
-docker_installation_package 'default' do
+docker_service 'default' do
   version '1.10.2'
-  action :create
 end
 
 ENV['CHEF_DRIVER'] = 'docker'
