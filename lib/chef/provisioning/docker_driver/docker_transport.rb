@@ -195,7 +195,7 @@ module DockerDriver
         docker_machines.lines.each do |line|
           machine_name, machine_url = line.chomp.split(',', 2)
           Chef::Log.debug("- #{machine_name} at URL #{machine_url.inspect}")
-          if machine_url == container.connection.url
+          if machine_url == connection_url
             Chef::Log.debug("Docker machine #{machine_name} at URL #{machine_url} matches the container's URL #{connection_url}! Will use it for port forwarding.")
             docker_machine = machine_name
           end

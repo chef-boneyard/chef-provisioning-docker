@@ -131,19 +131,6 @@ module DockerDriver
           container.stop
           container.delete
         end
-
-        if image_id && !machine_spec.attrs[:keep_image] && !machine_options[:keep_image]
-          begin
-            image = Docker::Image.get(machine_spec.reference['image_id'], {}, @connection)
-          rescue Docker::Error::NotFoundError
-          end
-
-          if image
-            action_handler.perform_action "destroy image for #{machine_spec.name}" do
-              image.delete
-            end
-          end
-        end
       end
     end
 
@@ -161,20 +148,20 @@ module DockerDriver
     #
 
     def allocate_image(action_handler, image_spec, image_options, machine_spec, machine_options)
+      tag_container_image(action_handler, machine_spec, image_spec)
+
       # Set machine options on the image to match our newly created image
       image_spec.reference = {
         'driver_url' => driver_url,
         'driver_version' => Chef::Provisioning::DockerDriver::VERSION,
         'allocated_at' => Time.now.to_i,
-        :docker_options => {
-          :base_image => {
-            :name => "chef_#{image_spec.name}",
-            :repository => 'chef',
-            :tag => image_spec.name
-          },
-          :from_image => true
+        'docker_options' => {
+          'base_image' => {
+            'name' => image_spec.name
+          }
         }
       }
+
       # Workaround for chef/chef-provisioning-docker#37
       machine_spec.attrs[:keep_image] = true
     end
@@ -185,11 +172,22 @@ module DockerDriver
 
     # workaround for https://github.com/chef/chef-provisioning/issues/358.
     def destroy_image(action_handler, image_spec, image_options, machine_options={})
-      image = Docker::Image.get("chef:#{image_spec.name}", {}, @connection)
+      image = image_for(image_spec)
       image.delete unless image.nil?
     end
 
     private
+
+    def tag_container_image(action_handler, machine_spec, image_spec)
+      container = container_for(machine_spec)
+      existing_image = image_for(image_spec)
+      unless existing_image && existing_image.id == container.info['Image']
+        image = Docker::Image.get(container.info['Image'], {}, @connection)
+        action_handler.perform_action "tag image #{container.info['Image']} as chef-images/#{image_spec.name}" do
+          image.tag('repo' => image_spec.name, 'force' => true)
+        end
+      end
+    end
 
     def to_camel_case(name)
       name.split('_').map { |x| x.capitalize }.join("")
@@ -216,7 +214,7 @@ module DockerDriver
 
     def machine_for(machine_spec, machine_options)
       Chef::Log.debug('machine_for...')
-      docker_options = machine_options[:docker_options] || Mash.from_hash(machine_spec.reference['docker_options'])
+      docker_options = machine_options[:docker_options] || Mash.from_hash(machine_spec.reference['docker_options'] || {})
 
       container = container_for(machine_spec)
 
@@ -245,10 +243,19 @@ module DockerDriver
       end
     end
 
+    def image_for(image_spec)
+      begin
+        Docker::Image.get(image_spec.name, {}, @connection)
+      rescue Docker::Error::NotFoundError
+      end
+    end
+
     def stringize_keys(hash)
-      hash.each_with_object({}) do |(k,v),hash|
-        v = stringize_keys(v) if v.is_a?(Hash)
-        hash[k.to_s] = v
+      if hash
+        hash.each_with_object({}) do |(k,v),hash|
+          v = stringize_keys(v) if v.is_a?(Hash)
+          hash[k.to_s] = v
+        end
       end
     end
   end

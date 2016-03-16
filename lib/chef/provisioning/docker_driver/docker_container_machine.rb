@@ -57,9 +57,17 @@ module DockerDriver
 
     private
 
-    def container_config(action_handler, docker_options)
+    def container_config(action_handler, machine_spec)
+      docker_options = machine_spec.reference['docker_options'] || {}
+
       # We're going to delete things to make it easier on ourselves, back it up
       docker_options = docker_options.dup
+
+      # Bring in from_image
+      if machine_spec.from_image
+        docker_options['base_image'] ||= {}
+        docker_options['base_image']['name'] = machine_spec.from_image
+      end
 
       # Respect :container_config
       config = stringize_keys(docker_options.delete('container_config') || {})
@@ -99,7 +107,7 @@ module DockerDriver
 
       # Create a chef-capable container (just like the final one, but with --net=host
       # and a command that keeps it open). Base it on the image.
-      config = container_config(action_handler, machine_spec.reference['docker_options'])
+      config = container_config(action_handler, machine_spec)
       config.merge!(
         'name' => "chef-converge.#{machine_spec.reference['container_name']}",
         'Cmd' => [ "/bin/sh", "-c", "while true;do sleep 1000; done" ],
@@ -160,7 +168,7 @@ module DockerDriver
       end
 
       # Create the new container
-      config = container_config(action_handler, machine_spec.reference['docker_options'])
+      config = container_config(action_handler, machine_spec)
       config.merge!(
         'name' => machine_spec.reference['container_name'],
         'Image' => converged_image.id
@@ -200,7 +208,7 @@ module DockerDriver
       repo, image_name = params['fromImage'].split('/', 2) if params['fromImage'].include?('/')
 
       begin
-        image = Docker::Image.get(image_name, @connection)
+        image = Docker::Image.get(image_name, {}, @connection)
       rescue Docker::Error::NotFoundError
         # If it's not found, pull it.
         action_handler.perform_action "pull #{params}" do
