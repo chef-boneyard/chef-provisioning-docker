@@ -16,49 +16,29 @@ describe file('/tmp/kitchen/nodes/ssh3.json') do
 end
 
 describe 'containers and images' do
-  let(:container) { Docker::Container.get(name) }
-  let(:image) { Docker::Image.get("chef:#{name}") }
-
-  describe 'ssh1' do
-    let(:name) { 'ssh1' }
-
-    it 'has a running container' do
-      expect(container.info['State']['Running']).to be true
-    end
-    it 'has an image' do
-      expect(image.id).to_not be nil
-    end    
+  it 'ssh1 is a running container' do
+    container = Docker::Container.get('ssh1')
+    expect(container.info['State']['Running']).to be true
   end
 
-  describe 'ssh2' do
-    let(:name) { 'ssh2' }
-
-    it 'has no container' do
-      expect{container}.to raise_error(Docker::Error::NotFoundError)
-    end
-    it 'has no image' do
-      expect{image}.to raise_error(Docker::Error::NotFoundError)
-    end    
+  it 'ssh2 has no container' do
+    expect { Docker::Container.get('ssh2') }.to raise_error(Docker::Error::NotFoundError)
   end
 
-  describe 'ssh3' do
-    let(:name) { 'ssh3' }
-
-    it 'has a stopped container' do
-      expect(container.info['State']['Running']).to be false
-    end
-    it 'has an image' do
-      expect(image.id).to_not be nil
-    end    
+  it 'ssh3 is a stopped container' do
+    container = Docker::Container.get('ssh3')
+    expect(container.info['State']['Running']).to be false
   end
 
-  describe 'ssh port' do
-    let(:container) { Docker::Container.get('ssh1') }
-    let(:ip) { container.info['NetworkSettings']['IPAddress']}
-    let(:file) { Net::SSH.start(ip, 'vagrant', password: 'vagrant').exec!('cat /etc/chef/client.rb') }
+  it 'ssh is an image' do
+    expect { Docker::Image.get('ssh') }.not_to raise_error
+  end
 
-    it 'returns chef client file' do
-      expect(file).to include 'ssh1'
-    end
+  it 'ssh1 has ssh port open and can cat chef client file' do
+    container = Docker::Container.get('ssh1')
+    ip = container.info['NetworkSettings']['IPAddress']
+    connection = container.info['NetworkSettings']['IPAddress']
+    file = Net::SSH.start(ip, 'vagrant', password: 'vagrant').exec!('sudo cat /etc/chef/client.rb')
+    expect(file).to include 'ssh1'
   end
 end
