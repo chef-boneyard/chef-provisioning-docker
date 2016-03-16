@@ -28,7 +28,7 @@ module DockerDriver
       end
 
       if options[:read_timeout]
-        Docker.options[:read_timeout] = options[:read_timeout]
+        opts[:wait] = options[:read_timeout]
       end
 
       command = Shellwords.split(command) if command.is_a?(String)
