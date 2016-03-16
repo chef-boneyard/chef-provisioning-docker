@@ -41,9 +41,9 @@ module DockerDriver
         # to be set for command-line utilities
         ENV['DOCKER_HOST'] = url
         Chef::Log.debug("Setting Docker URL to #{url}")
-        Docker.logger = Chef::Log
         Docker.url = url
       end
+      Docker.logger = Chef::Log
 
       @connection = Docker.connection
     end

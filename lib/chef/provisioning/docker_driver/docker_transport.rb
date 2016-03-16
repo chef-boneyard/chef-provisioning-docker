@@ -22,11 +22,12 @@ module DockerDriver
     attr_reader :config
     attr_accessor :container
 
-    def execute(command, options={})
+    def execute(command, timeout: 10, keep_stdin_open: nil, tty: nil, detached: nil, **options)
       opts = {}
-      if options[:keep_stdin_open]
-        opts[:stdin] = true
-      end
+      opts[:tty] = tty unless tty.nil?
+      opts[:detached] = detached unless detached.nil?
+      opts[:stdin] = keep_stdin_open unless keep_stdin_open.nil?
+      opts[:wait] = timeout unless timeout.nil?
 
       command = Shellwords.split(command) if command.is_a?(String)
       Chef::Log.debug("execute #{command.inspect} on container #{container.id} with options #{opts}'")
