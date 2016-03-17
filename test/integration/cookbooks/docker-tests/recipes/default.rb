@@ -7,9 +7,7 @@ when 'rhel'
   include_recipe 'yum-docker'
 end
 
-docker_service 'default' do
-  version '1.10.2'
-end
+docker_service 'default'
 
 ENV['CHEF_DRIVER'] = 'docker'
 

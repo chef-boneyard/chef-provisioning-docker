@@ -26,6 +26,9 @@ module DockerDriver
         end
       end
       super(action_handler)
+      # Commit after convergence setup (such as the install of Chef)
+      # to break up the cost of the commit and avoid read timeouts
+      transport.container.commit
     end
 
     def converge(action_handler)
@@ -140,10 +143,8 @@ module DockerDriver
     def commit_converged_image(action_handler, machine_spec, converge_container)
       # Commit the converged container to an image
       converged_image = nil
-      action_handler.perform_action "create image from converged container for #{machine_spec.name}" do
+      action_handler.perform_action "commit and delete converged container for #{machine_spec.name}" do
         converged_image = converge_container.commit
-      end
-      action_handler.perform_action "stop and delete chef-converge container chef-converge.#{machine_spec.name} now that converge is complete" do
         converge_container.stop!
         converge_container.delete
       end

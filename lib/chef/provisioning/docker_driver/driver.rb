@@ -41,11 +41,14 @@ module DockerDriver
         # to be set for command-line utilities
         ENV['DOCKER_HOST'] = url
         Chef::Log.debug("Setting Docker URL to #{url}")
-        Docker.url = url
       end
-      Docker.logger = Chef::Log
 
-      @connection = Docker.connection
+      ENV['DOCKER_HOST'] ||= url if url
+      Docker.logger = Chef::Log
+      options = { }
+      options.merge!(Docker.options) if Docker.options
+      options.merge!(config.hash_dup) if config
+      @connection = Docker::Connection.new(url || Docker.url, options)
     end
 
     def self.canonicalize_url(driver_url, config)

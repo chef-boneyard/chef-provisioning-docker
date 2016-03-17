@@ -22,7 +22,7 @@ module DockerDriver
     attr_reader :config
     attr_accessor :container
 
-    def execute(command, timeout: 10, keep_stdin_open: nil, tty: nil, detached: nil, **options)
+    def execute(command, timeout: nil, keep_stdin_open: nil, tty: nil, detached: nil, **options)
       opts = {}
       opts[:tty] = tty unless tty.nil?
       opts[:detached] = detached unless detached.nil?
