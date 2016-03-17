@@ -28,6 +28,10 @@ module DockerDriver
       Driver.new(driver_url, config)
     end
 
+    def driver_url
+      "docker:#{Docker.url}"
+    end
+
     def initialize(driver_url, config)
       super
       url = Driver.connection_url(driver_url)
@@ -37,10 +41,14 @@ module DockerDriver
         # to be set for command-line utilities
         ENV['DOCKER_HOST'] = url
         Chef::Log.debug("Setting Docker URL to #{url}")
-        Docker.url = url
       end
 
-      @connection = Docker.connection
+      ENV['DOCKER_HOST'] ||= url if url
+      Docker.logger = Chef::Log
+      options = Docker.options.dup || {}
+      options.merge!(read_timeout: 600)
+      options.merge!(config.hash_dup) if config
+      @connection = Docker::Connection.new(url || Docker.url, options)
     end
 
     def self.canonicalize_url(driver_url, config)
@@ -75,6 +83,8 @@ module DockerDriver
         action_handler,
         machine_spec
       )
+
+      # Grab options from existing machine (TODO seems wrong) and set the machine_spec to that
       docker_options = machine_options[:docker_options]
       container_id = nil
       image_id = machine_options[:image_id]
@@ -84,7 +94,6 @@ module DockerDriver
         image_id ||= machine_spec.reference['image_id']
         docker_options ||= machine_spec.reference['docker_options']
       end
-
       container_name ||= machine_spec.name
       machine_spec.reference = {
         'driver_url' => driver_url,
@@ -96,137 +105,19 @@ module DockerDriver
         'docker_options' => stringize_keys(docker_options),
         'container_id' => container_id
       }
-      build_container(machine_spec, docker_options)
     end
 
     def ready_machine(action_handler, machine_spec, machine_options)
-      start_machine(action_handler, machine_spec, machine_options)
       machine_for(machine_spec, machine_options)
     end
 
-    def build_container(machine_spec, docker_options)
+    def start_machine(action_handler, machine_spec, machine_options)
       container = container_for(machine_spec)
-      return container unless container.nil?
-
-      image = find_image(machine_spec) ||
-        build_image(machine_spec, docker_options)
-
-      args = [
-        'docker',
-        'run',
-        '--name',
-        machine_spec.reference['container_name'],
-        '--detach'
-      ]
-
-      if docker_options[:keep_stdin_open]
-        args << '-i'
-      end
-
-      # We create the initial container with --net host so it can access things
-      # while it converges. When the final container starts, it will have its
-      # normal network.
-      args << '--net'
-      args << 'host'
-
-      if docker_options[:env]
-        docker_options[:env].each do |key, value|
-          args << '-e'
-          args << "#{key}=#{value}"
+      if container && !container.info['State']['Running']
+        action_handler.perform_action "start container #{machine_spec.name}" do
+          container.start!
         end
       end
-
-      if docker_options[:ports]
-        docker_options[:ports].each do |portnum|
-          args << '-p'
-          args << "#{portnum}"
-        end
-      end
-
-      if docker_options[:volumes]
-        docker_options[:volumes].each do |volume|
-          args << '-v'
-          args << "#{volume}"
-        end
-      end
-
-      if docker_options[:dns]
-        docker_options[:dns].each do |entry|
-          args << '--dns'
-          args << "#{entry}"
-        end
-      end
-
-      if docker_options[:dns_search]
-        args << '--dns-search'
-        args << "#{docker_options[:dns_search]}"
-      end
-
-      args << image.id
-      args += Shellwords.split("/bin/sh -c 'while true;do sleep 1000; done'")
-
-      cmdstr = Shellwords.join(args)
-      Chef::Log.debug("Executing #{cmdstr}")
-
-      cmd = Mixlib::ShellOut.new(cmdstr)
-      cmd.run_command
-
-      container = Docker::Container.get(machine_spec.reference['container_name'])
-
-      Chef::Log.debug("Container id: #{container.id}")
-      machine_spec.reference['container_id'] = container.id
-      container
-    end
-
-    def build_image(machine_spec, docker_options)
-      base_image = docker_options[:base_image] || base_image_for(machine_spec)
-      source_name = base_image[:name]
-      source_repository = base_image[:repository]
-      source_tag = base_image[:tag]
-
-      target_tag = machine_spec.reference['container_name']
-
-      image = Docker::Image.create(
-        'fromImage' => source_name,
-        'repo' => source_repository,
-        'tag' => source_tag
-      )
-
-      Chef::Log.debug("Allocated #{image}")
-      image.tag('repo' => 'chef', 'tag' => target_tag)
-      Chef::Log.debug("Tagged image #{image}")
-
-      machine_spec.reference['image_id'] = image.id
-      image
-    end
-
-    def allocate_image(action_handler, image_spec, image_options, machine_spec, machine_options)
-      # Set machine options on the image to match our newly created image
-      image_spec.reference = {
-        'driver_url' => driver_url,
-        'driver_version' => Chef::Provisioning::DockerDriver::VERSION,
-        'allocated_at' => Time.now.to_i,
-        :docker_options => {
-          :base_image => {
-            :name => "chef_#{image_spec.name}",
-            :repository => 'chef',
-            :tag => image_spec.name
-          },
-          :from_image => true
-        }
-      }
-      # Workaround for chef/chef-provisioning-docker#37
-      machine_spec.attrs[:keep_image] = true
-    end
-
-    def ready_image(action_handler, image_spec, image_options)
-      Chef::Log.debug('READY IMAGE!')
-    end
-
-    # workaround for https://github.com/chef/chef-provisioning/issues/358.
-    def destroy_image(action_handler, image_spec, image_options, machine_options={})
-      image = Docker::Image.get("chef:#{image_spec.name}")
-      image.delete unless image.nil?
     end
 
     # Connect to machine without acquiring it
@@ -238,53 +129,79 @@ module DockerDriver
     def destroy_machine(action_handler, machine_spec, machine_options)
       container = container_for(machine_spec)
       if container
-        Chef::Log.debug("Destroying container: #{container.id}")
-        container.delete(:force => true)
-      end
-
-      if !machine_spec.attrs[:keep_image] && !machine_options[:keep_image]
-        image = find_image(machine_spec)
-        Chef::Log.debug("Destroying image: chef:#{image.id}")
-        image.delete
+        image_id = container.info['Image']
+        action_handler.perform_action "stop and destroy container #{machine_spec.name}" do
+          container.stop
+          container.delete
+        end
       end
     end
 
     def stop_machine(action_handler, machine_spec, machine_options)
       container = container_for(machine_spec)
-      return if container.nil?
-
-      container.stop if container.info['State']['Running']
+      if container.info['State']['Running']
+        action_handler.perform_action "stop container #{machine_spec.name}" do
+          container.stop!
+        end
+      end
     end
 
-    def find_image(machine_spec)
-      image = nil
+    #
+    # Images
+    #
 
-      if machine_spec.reference['image_id']
-        begin
-          image = Docker::Image.get(machine_spec.reference['image_id'])
-        rescue Docker::Error::NotFoundError
+    def allocate_image(action_handler, image_spec, image_options, machine_spec, machine_options)
+      tag_container_image(action_handler, machine_spec, image_spec)
+
+      # Set machine options on the image to match our newly created image
+      image_spec.reference = {
+        'driver_url' => driver_url,
+        'driver_version' => Chef::Provisioning::DockerDriver::VERSION,
+        'allocated_at' => Time.now.to_i,
+        'docker_options' => {
+          'base_image' => {
+            'name' => image_spec.name
+          }
+        }
+      }
+
+      # Workaround for chef/chef-provisioning-docker#37
+      machine_spec.attrs[:keep_image] = true
+    end
+
+    def ready_image(action_handler, image_spec, image_options)
+      Chef::Log.debug('READY IMAGE!')
+    end
+
+    # workaround for https://github.com/chef/chef-provisioning/issues/358.
+    def destroy_image(action_handler, image_spec, image_options, machine_options={})
+      image = image_for(image_spec)
+      image.delete unless image.nil?
+    end
+
+    private
+
+    def tag_container_image(action_handler, machine_spec, image_spec)
+      container = container_for(machine_spec)
+      existing_image = image_for(image_spec)
+      unless existing_image && existing_image.id == container.info['Image']
+        image = Docker::Image.get(container.info['Image'], {}, @connection)
+        action_handler.perform_action "tag image #{container.info['Image']} as chef-images/#{image_spec.name}" do
+          image.tag('repo' => image_spec.name, 'force' => true)
         end
       end
+    end
 
-      if image.nil?
-        image_name = "chef:#{machine_spec.reference['container_name']}"
-        if machine_spec.from_image
-          base_image = base_image_for(machine_spec)
-          image_name = "#{base_image[:repository]}:#{base_image[:tag]}"
-        end
+    def to_camel_case(name)
+      name.split('_').map { |x| x.capitalize }.join("")
+    end
 
-        image = Docker::Image.all.select {
-            |i| i.info['RepoTags'].include? image_name
-        }.first
-
-        if machine_spec.from_image && image.nil?
-          raise "Unable to locate machine_image for #{image_name}"
-        end
-      end
-
-      machine_spec.reference['image_id'] = image.id if image
-
-      image
+    def to_snake_case(name)
+      # ExposedPorts -> _exposed_ports
+      name = name.gsub(/[A-Z]/) { |x| "_#{x.downcase}" }
+      # _exposed_ports -> exposed_ports
+      name = name[1..-1] if name.start_with?('_')
+      name
     end
 
     def from_image_from_action_handler(action_handler, machine_spec)
@@ -298,22 +215,11 @@ module DockerDriver
       end
     end
 
-    def driver_url
-      "docker:#{Docker.url}"
-    end
-
-    def start_machine(action_handler, machine_spec, machine_options)
-      container = container_for(machine_spec)
-      if container && !container.info['State']['Running']
-        container.start
-      end
-    end
-
     def machine_for(machine_spec, machine_options)
       Chef::Log.debug('machine_for...')
-      docker_options = machine_options[:docker_options] || Mash.from_hash(machine_spec.reference['docker_options'])
+      docker_options = machine_options[:docker_options] || Mash.from_hash(machine_spec.reference['docker_options'] || {})
 
-      container = Docker::Container.get(machine_spec.reference['container_id'], @connection)
+      container = container_for(machine_spec)
 
       if machine_spec.from_image
         convergence_strategy = Chef::Provisioning::ConvergenceStrategy::NoConverge.new({}, config)
@@ -328,28 +234,31 @@ module DockerDriver
         machine_spec,
         transport,
         convergence_strategy,
+        @connection,
         docker_options[:command]
       )
     end
 
     def container_for(machine_spec)
-      container_id = machine_spec.reference['container_id']
       begin
-        container = Docker::Container.get(container_id, @connection) if container_id
+        Docker::Container.get(machine_spec.name, {}, @connection)
       rescue Docker::Error::NotFoundError
       end
     end
 
-    def base_image_for(machine_spec)
-      Chef::Log.debug("Looking for image #{machine_spec.from_image}")
-      image_spec = machine_spec.managed_entry_store.get!(:machine_image, machine_spec.from_image)
-      Mash.new(image_spec.reference)[:docker_options][:base_image]
+    def image_for(image_spec)
+      begin
+        Docker::Image.get(image_spec.name, {}, @connection)
+      rescue Docker::Error::NotFoundError
+      end
     end
 
     def stringize_keys(hash)
-      hash.each_with_object({}) do |(k,v),hash|
-        v = stringize_keys(v) if v.is_a?(Hash)
-        hash[k.to_s] = v
+      if hash
+        hash.each_with_object({}) do |(k,v),hash|
+          v = stringize_keys(v) if v.is_a?(Hash)
+          hash[k.to_s] = v
+        end
       end
     end
   end

@@ -16,15 +16,16 @@ Using this , you can then define a machine similar to the following example:
 
 ```ruby
 require 'chef/provisioning/docker_driver'
+with_driver 'docker'
 
 machine 'wario' do
-    recipe 'openssh::default'
+  recipe 'openssh::default'
 
-    machine_options :docker_options => {
-      :base_image => {
-          :name => 'ubuntu',
-          :repository => 'ubuntu',
-          :tag => '14.04'
+  machine_options docker_options: {
+    base_image: {
+      name: 'ubuntu',
+      repository: 'ubuntu',
+      tag: '14.04'
       },
       :command => '/usr/sbin/sshd -p 8022 -D',
 
@@ -97,4 +98,3 @@ end
 This will create a docker container based on Ubuntu 14.04 and
 then execute the Apache recipe and run the /usr/sbin/httpd command
 as the container's run command.
-

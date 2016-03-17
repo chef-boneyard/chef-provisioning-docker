@@ -1,5 +1,6 @@
 require 'chef/provisioning/transport'
 require 'chef/provisioning/transport/ssh'
+require 'chef/provisioning/docker_driver/chef_zero_http_proxy'
 require 'docker'
 require 'archive/tar/minitar'
 require 'shellwords'
@@ -21,11 +22,12 @@ module DockerDriver
     attr_reader :config
     attr_accessor :container
 
-    def execute(command, options={})
+    def execute(command, timeout: nil, keep_stdin_open: nil, tty: nil, detached: nil, **options)
       opts = {}
-      if options[:keep_stdin_open]
-        opts[:stdin] = true
-      end
+      opts[:tty] = tty unless tty.nil?
+      opts[:detached] = detached unless detached.nil?
+      opts[:stdin] = keep_stdin_open unless keep_stdin_open.nil?
+      opts[:wait] = timeout unless timeout.nil?
 
       command = Shellwords.split(command) if command.is_a?(String)
       Chef::Log.debug("execute #{command.inspect} on container #{container.id} with options #{opts}'")
@@ -115,8 +117,34 @@ module DockerDriver
             Chef::Log.debug("Session loop completed normally")
           end
         else
-          # We are the host. The docker machine was run with --net=host, so it
-          # will be able to talk to us automatically.
+          # We are the host. Find the docker machine's gateway (us) and talk to that;
+          # and set up a little proxy that will forward the container's requests to
+          # chef-zero
+          result = execute('ip route list', :read_only => true)
+
+          Chef::Log.debug("IP route: #{result.stdout}")
+
+          if result.stdout =~ /default via (\S+)/
+
+            old_uri = uri.dup
+
+            uri.host = $1
+
+            if !@proxy_thread
+              # Listen to docker instances only, and forward to localhost
+              @proxy_thread = Thread.new do
+                begin
+                  Chef::Log.debug("Starting proxy thread: #{old_uri.host}:#{old_uri.port} <--> #{uri.host}:#{uri.port}")
+                  ChefZeroHttpProxy.new(uri.host, uri.port, old_uri.host, old_uri.port).run
+                rescue
+                  Chef::Log.error("Proxy thread unable to start: #{$!}")
+                end
+              end
+            end
+          else
+            raise "Cannot forward port: ip route ls did not show default in expected format.\nSTDOUT: #{result.stdout}"
+          end
+
         end
       else
         old_uri = uri.dup
@@ -140,8 +168,6 @@ module DockerDriver
     def available?
     end
 
-    private
-
     def is_local_machine(host)
       local_addrs = Socket.ip_address_list
       host_addrs = Addrinfo.getaddrinfo(host, nil)
@@ -152,7 +178,7 @@ module DockerDriver
       end
     end
 
-    def docker_toolkit_transport
+    def docker_toolkit_transport(connection_url=nil)
       if !defined?(@docker_toolkit_transport)
         # Figure out which docker-machine this container is in
         begin
@@ -162,18 +188,21 @@ module DockerDriver
           @docker_toolkit_transport = nil
           return
         end
+
+        connection_url ||= container.connection.url
+
         Chef::Log.debug("Found docker machines:")
         docker_machine = nil
         docker_machines.lines.each do |line|
           machine_name, machine_url = line.chomp.split(',', 2)
           Chef::Log.debug("- #{machine_name} at URL #{machine_url.inspect}")
-          if machine_url == container.connection.url
-            Chef::Log.debug("Docker machine #{machine_name} at URL #{machine_url} matches the container's URL #{container.connection.url}! Will use it for port forwarding.")
+          if machine_url == connection_url
+            Chef::Log.debug("Docker machine #{machine_name} at URL #{machine_url} matches the container's URL #{connection_url}! Will use it for port forwarding.")
             docker_machine = machine_name
           end
         end
         if !docker_machine
-          Chef::Log.debug("Docker Toolkit is installed, but no Docker machine's URL matches #{container.connection.url.inspect}. Assuming docker must be installed as well ...")
+          Chef::Log.debug("Docker Toolkit is installed, but no Docker machine's URL matches #{connection_url.inspect}. Assuming docker must be installed as well ...")
           @docker_toolkit_transport = nil
           return
         end
