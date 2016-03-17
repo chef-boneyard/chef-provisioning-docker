@@ -45,8 +45,8 @@ module DockerDriver
 
       ENV['DOCKER_HOST'] ||= url if url
       Docker.logger = Chef::Log
-      options = { }
-      options.merge!(Docker.options) if Docker.options
+      options = Docker.options.dup || {}
+      options.merge!(read_timeout: 600)
       options.merge!(config.hash_dup) if config
       @connection = Docker::Connection.new(url || Docker.url, options)
     end
