@@ -96,5 +96,5 @@ end
 ```
 
 This will create a docker container based on Ubuntu 14.04 and
-then execute the Apache recipe and run the /usr/sbin/httpd command
+then execute the openssh recipe and run the /usr/sbin/sshd command
 as the container's run command.
