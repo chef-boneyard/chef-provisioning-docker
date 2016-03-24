@@ -62,6 +62,9 @@ machine 'wario' do
       # if you need to keep stdin open (i.e docker run -i)
       # :keep_stdin_open => true
 
+      # if you need a longer timeout for chef to execute
+      # :read_timeout => 7200
+
     }
 end
 ```
