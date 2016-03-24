@@ -146,13 +146,6 @@ module DockerDriver
           end
 
         end
-      else
-        old_uri = uri.dup
-        # Find out our external network address of the URL and report it
-        # to the container in case it has no DNS (often the case).
-        uri.scheme = 'http' if 'chefzero' == uri.scheme && uri.host == 'localhost'
-        uri.host = Socket.getaddrinfo(uri.host, uri.scheme, nil, :STREAM)[0][3]
-        Chef::Log.debug("Looked up IP address of #{old_uri} and modified URL to point at it: #{uri}")
       end
 
       uri.to_s
