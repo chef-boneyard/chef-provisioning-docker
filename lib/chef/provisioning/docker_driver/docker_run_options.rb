@@ -517,8 +517,10 @@ class DockerRunOptions
       config["HostConfig"]["Binds"] ||= []
       config["HostConfig"]["Binds"] += binds
     end
-    config["Volumes"] ||= []
-    config["Volumes"] += volumes
+    unless volumes.empty?
+      config["Volumes"] ||= []
+      config["Volumes"] += volumes
+    end
   end
   #   --volume-driver=""            Container's volume driver
   cli_option :volume_driver,       api: "HostConfig/VolumeDriver"
