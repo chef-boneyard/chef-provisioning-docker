@@ -81,7 +81,7 @@ module DockerDriver
     end
 
     def download_file(path, local_path)
-      file = File.open(local_path, 'w')
+      file = File.open(local_path, 'wb')
       begin
         file.write(read_file(path))
         file.close
@@ -91,7 +91,7 @@ module DockerDriver
     end
 
     def upload_file(local_path, path)
-      write_file(path, IO.read(local_path))
+      write_file(path, IO.read(local_path, mode: "rb"))
     end
 
     def make_url_available_to_remote(local_url)
