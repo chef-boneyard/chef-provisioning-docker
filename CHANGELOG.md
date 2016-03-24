@@ -1,7 +1,37 @@
 # Change Log
 
-## [0.8.0](https://github.com/chef/chef-provisioning-docker/tree/0.8.0) (2016-02-03)
-[Full Changelog](https://github.com/chef/chef-provisioning-docker/compare/v0.7...0.8.0)
+## [1.0.0.beta.3](https://github.com/chef/chef-provisioning-docker/tree/1.0.0.beta.3) (2016-03-24)
+[Full Changelog](https://github.com/chef/chef-provisioning-docker/compare/v1.0.0.beta.2...1.0.0.beta.3)
+
+**Merged pull requests:**
+
+- fix explanation of the recipe [\#89](https://github.com/chef/chef-provisioning-docker/pull/89) ([jgoulah](https://github.com/jgoulah))
+- remove logic that changes hostname to an ip [\#88](https://github.com/chef/chef-provisioning-docker/pull/88) ([jgoulah](https://github.com/jgoulah))
+- don't pass empty volumes - fixes issue \#86 [\#87](https://github.com/chef/chef-provisioning-docker/pull/87) ([jgoulah](https://github.com/jgoulah))
+
+## [v1.0.0.beta.2](https://github.com/chef/chef-provisioning-docker/tree/v1.0.0.beta.2) (2016-03-24)
+[Full Changelog](https://github.com/chef/chef-provisioning-docker/compare/v1.0.0.beta.1...v1.0.0.beta.2)
+
+**Closed issues:**
+
+- volumes are not mounting properly [\#85](https://github.com/chef/chef-provisioning-docker/issues/85)
+- Update /etc/hosts of Docker container [\#82](https://github.com/chef/chef-provisioning-docker/issues/82)
+- chef server URL being set to "172.17.0.1" and fails SSL verify [\#79](https://github.com/chef/chef-provisioning-docker/issues/79)
+- docker-machine support [\#78](https://github.com/chef/chef-provisioning-docker/issues/78)
+
+**Merged pull requests:**
+
+- Add all options [\#83](https://github.com/chef/chef-provisioning-docker/pull/83) ([jkeiser](https://github.com/jkeiser))
+
+## [v1.0.0.beta.1](https://github.com/chef/chef-provisioning-docker/tree/v1.0.0.beta.1) (2016-03-11)
+[Full Changelog](https://github.com/chef/chef-provisioning-docker/compare/v0.8.0...v1.0.0.beta.1)
+
+**Merged pull requests:**
+
+- Docker toolbox and chef-zero support [\#81](https://github.com/chef/chef-provisioning-docker/pull/81) ([jkeiser](https://github.com/jkeiser))
+
+## [v0.8.0](https://github.com/chef/chef-provisioning-docker/tree/v0.8.0) (2016-02-03)
+[Full Changelog](https://github.com/chef/chef-provisioning-docker/compare/v0.7...v0.8.0)
 
 **Implemented enhancements:**
 
@@ -11,6 +41,10 @@
 **Fixed bugs:**
 
 - gemspec relies on very old chef-provisioning version [\#45](https://github.com/chef/chef-provisioning-docker/issues/45)
+
+**Merged pull requests:**
+
+- Bump revision to 0.8.0, add changelog generator [\#76](https://github.com/chef/chef-provisioning-docker/pull/76) ([jkeiser](https://github.com/jkeiser))
 
 ## [v0.7](https://github.com/chef/chef-provisioning-docker/tree/v0.7) (2015-06-22)
 [Full Changelog](https://github.com/chef/chef-provisioning-docker/compare/v0.6...v0.7)
