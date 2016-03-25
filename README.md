@@ -62,7 +62,12 @@ machine 'wario' do
       # if you need to keep stdin open (i.e docker run -i)
       # :keep_stdin_open => true
 
+    },
+    # optional, default timeout is 600
+    docker_connection: {
+     :read_timeout => 1000,
     }
+
 end
 ```
 
