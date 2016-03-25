@@ -1,7 +1,14 @@
 # Change Log
 
-## [1.0.0.beta.3](https://github.com/chef/chef-provisioning-docker/tree/1.0.0.beta.3) (2016-03-24)
-[Full Changelog](https://github.com/chef/chef-provisioning-docker/compare/v1.0.0.beta.2...1.0.0.beta.3)
+## [0.9.0](https://github.com/chef/chef-provisioning-docker/tree/0.9.0) (2016-03-25)
+[Full Changelog](https://github.com/chef/chef-provisioning-docker/compare/v1.0.0.beta.3...0.9.0)
+
+**Merged pull requests:**
+
+- avoid overwriting client\_key when merging config [\#92](https://github.com/chef/chef-provisioning-docker/pull/92) ([jgoulah](https://github.com/jgoulah))
+
+## [v1.0.0.beta.3](https://github.com/chef/chef-provisioning-docker/tree/v1.0.0.beta.3) (2016-03-24)
+[Full Changelog](https://github.com/chef/chef-provisioning-docker/compare/v1.0.0.beta.2...v1.0.0.beta.3)
 
 **Merged pull requests:**
 
