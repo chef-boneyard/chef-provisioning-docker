@@ -1,8 +1,10 @@
 # chef-provisioning-docker
 
+[![Build Status](https://travis-ci.org/chef/chef-provisioning-docker.svg?branch=master)](https://travis-ci.org/chef/chef-provisioning-docker) [![Gem Version](https://badge.fury.io/rb/chef-provisioning-docker.svg)](http://badge.fury.io/rb/chef-provisioning-docker)
+
 How to use:
 
-First you need to ensure that Docker is running. This can be done on a Linux host using Docker's installers or on OSX using boot2docker. Once you have that, you can install the dependencies with Bundler and then use the Docker  like the following:
+First you need to ensure that Docker is running. This can be done on a Linux host using Docker's installers or on OSX using boot2docker. Once you have that, you can install the dependencies with Bundler and then use the Docker like the following:
 
 ```
 CHEF_DRIVER=docker bundle exec chef-client -z docker_ubuntu_image.rb
@@ -75,7 +77,7 @@ end
 
 ## Machine images
 
-This  supports the new machine image paradigm; with Docker you can build a base image, save that and use it to create a new container. Here is an example of this:
+This supports the new machine image paradigm; with Docker you can build a base image, save that and use it to create a new container. Here is an example of this:
 
 ```ruby
 require 'chef/provisioning/docker_driver'
@@ -106,6 +108,4 @@ machine 'ssh00' do
 end
 ```
 
-This will create a docker container based on Ubuntu 14.04 and
-then execute the openssh recipe and run the /usr/sbin/sshd command
-as the container's run command.
+This will create a docker container based on Ubuntu 14.04 and then execute the openssh recipe and run the /usr/sbin/sshd command as the container's run command.
