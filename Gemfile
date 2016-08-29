@@ -1,5 +1,4 @@
 source "https://rubygems.org"
-gemfile
 gemspec
 
-gem 'chef-provisioning', :git => 'https://github.com/opscode/chef-provisioning.git', :branch => 'master'
+gem "chef", git: "https://github.com/chef/chef" if Gem::Version.new(RUBY_VERSION) >= Gem::Version.new("2.2.2") # until stable 12.14 is released (won't load new cheffish and such otherwise)

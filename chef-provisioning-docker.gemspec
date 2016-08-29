@@ -9,11 +9,11 @@ Gem::Specification.new do |s|
   s.summary = 'Provisioner for creating Docker containers in Chef Provisioning.'
   s.description = s.summary
   s.author = 'Tom Duffield'
-  s.email = 'tom@getchef.com'
-  s.homepage = 'https://github.com/opscode/chef-provisioning-docker'
+  s.email = 'tom@chef.io'
+  s.homepage = 'https://github.com/chef/chef-provisioning-docker'
 
   s.add_dependency 'chef'
-  s.add_dependency 'chef-provisioning', '~> 1.0'
+  s.add_dependency 'chef-provisioning', '>= 1.0', '< 3.0'
   s.add_dependency 'docker-api', '~> 1.26', '>= 1.26.2'
   s.add_dependency 'minitar'
   s.add_dependency 'sys-proctable'
