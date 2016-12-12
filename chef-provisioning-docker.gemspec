@@ -13,7 +13,7 @@ Gem::Specification.new do |s|
   s.homepage = 'https://github.com/chef/chef-provisioning-docker'
 
   s.add_dependency 'chef'
-  s.add_dependency 'chef-provisioning', '>= 1.0', '< 3.0'
+  s.add_dependency 'chef-provisioning', '>= 2.0', '< 3.0'
   s.add_dependency 'docker-api', '~> 1.26', '>= 1.26.2'
   s.add_dependency 'minitar'
   s.add_dependency 'sys-proctable'
