@@ -128,7 +128,7 @@ module DockerDriver
 
             old_uri = uri.dup
 
-            uri.host = $1
+            uri.host = ENV["PROXY_HOST_OVERRIDE"] ?  ENV["PROXY_HOST_OVERRIDE"] : $1
 
             if !@proxy_thread
               # Listen to docker instances only, and forward to localhost
