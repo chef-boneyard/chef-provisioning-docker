@@ -1,0 +1,7 @@
+Lint/NestedMethodDefinition:
+  Exclude:
+    - 'spec/docker_support.rb'
+
+Lint/UselessAccessModifier:
+  Exclude:
+    - 'lib/chef/provisioning/docker_driver/docker_run_options.rb'

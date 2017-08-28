@@ -1,15 +1,15 @@
 # require "mixlib/shellout"
-require 'chef'
-require 'chef/mixins'
-require 'chef/dsl'
-require 'chef/application'
-require 'chef/applications'
+require "chef"
+require "chef/mixins"
+require "chef/dsl"
+require "chef/application"
+require "chef/applications"
 
-require 'chef/shell'
-require 'chef/util/file_edit'
+require "chef/shell"
+require "chef/util/file_edit"
 
-require 'chef/config'
-require 'docker_support'
+require "chef/config"
+require "docker_support"
 
 RSpec.configure do |config|
   config.expect_with :rspec do |expectations|

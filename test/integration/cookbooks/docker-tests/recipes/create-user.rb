@@ -1,21 +1,21 @@
-directory '/var/run/sshd'
+directory "/var/run/sshd"
 
-user 'vagrant' do
+user "vagrant" do
   action :create
   supports manage_home: true
-  home '/home/vagrant'
-  shell '/bin/bash'
+  home "/home/vagrant"
+  shell "/bin/bash"
 end
 
-bash 'create password' do
+bash "create password" do
   code <<-EOS
     usermod -p "`openssl passwd -1 'vagrant'`" vagrant
   EOS
 end
 
-bash 'add vagrant to sudoers' do
-  user 'root'
-  cwd '/tmp'
+bash "add vagrant to sudoers" do
+  user "root"
+  cwd "/tmp"
   code <<-EOH
      echo 'vagrant ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
   EOH
