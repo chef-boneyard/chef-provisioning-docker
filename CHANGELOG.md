@@ -1,5 +1,11 @@
 # Change Log
 
+## [0.11.0](https://github.com/chef/chef-provisioning-docker/tree/0.11.0) (2018-03-12)
+
+- Update from ChefMetal to Chef::Provisioning
+- Added the ability to override default proxy gateway
+- Updated the required chef-provisioning release to 2.0+, which also increases the required Ruby release to 2.2.2+
+
 ## [0.10.0](https://github.com/chef/chef-provisioning-docker/tree/0.10.0) (2016-08-29)
 
 [Full Changelog](https://github.com/chef/chef-provisioning-docker/compare/v0.9.0...0.10.0)
