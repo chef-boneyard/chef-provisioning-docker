@@ -111,29 +111,32 @@ module DockerDriver
       # Create a chef-capable container (just like the final one, but with --net=host
       # and a command that keeps it open). Base it on the image.
       config = container_config(action_handler, machine_spec)
-      config.merge!(
+
+      # Create a copy so we can save the final Cmd
+      converge_config = config.merge(
         'name' => "chef-converge.#{machine_spec.reference['container_name']}",
-        'Cmd' => [ "/bin/sh", "-c", "while true;do sleep 1000; done" ],
+        'Cmd' => [ "while true;do sleep 1000; done" ],
+        'Entrypoint' => ['/bin/sh', '-c']
       )
       # If we're using Docker Toolkit, we need to use host networking for the converge
       # so we can open up the port we need. Don't force it in other cases, though.
       if transport.is_local_machine(URI(transport.config[:chef_server_url]).host) &&
          transport.docker_toolkit_transport(@connection.url)
-        config['HostConfig'] ||= {}
-        config['HostConfig'].merge!('NetworkMode' => 'host')
+        converge_config['HostConfig'] ||= {}
+        converge_config['HostConfig'].merge!('NetworkMode' => 'host')
         # These are incompatible with NetworkMode: host
-        config['HostConfig'].delete('Links')
-        config['HostConfig'].delete('ExtraHosts')
-        config.delete('NetworkSettings')
+        converge_config['HostConfig'].delete('Links')
+        converge_config['HostConfig'].delete('ExtraHosts')
+        converge_config.delete('NetworkSettings')
       end
       # Don't use any resources that need to be shared (such as exposed ports)
-      config.delete('ExposedPorts')
+      converge_config.delete('ExposedPorts')
 
       Chef::Log.debug("Creating converge container with config #{config} ...")
       action_handler.perform_action "create container to converge #{machine_spec.name}" do
         # create deletes the name :(
-        Docker::Container.create(config.dup, @connection)
-        converge_container = Docker::Container.get(config['name'], {}, @connection)
+        Docker::Container.create(converge_config.dup, @connection)
+        converge_container = Docker::Container.get(converge_config['name'], {}, @connection)
         Chef::Log.debug("Created converge container #{converge_container.id}")
       end
       converge_container
@@ -144,7 +147,8 @@ module DockerDriver
       # Commit the converged container to an image
       converged_image = nil
       action_handler.perform_action "commit and delete converged container for #{machine_spec.name}" do
-        converged_image = converge_container.commit
+        config = container_config(action_handler, machine_spec)
+        converged_image = converge_container.commit('run' => config)
         converge_container.stop!
         converge_container.delete
       end
