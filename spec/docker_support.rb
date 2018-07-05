@@ -1,10 +1,10 @@
 module DockerSupport
-  require 'cheffish/rspec/chef_run_support'
+  require "cheffish/rspec/chef_run_support"
   def self.extended(other)
     other.extend Cheffish::RSpec::ChefRunSupport
   end
 
-  require 'chef/provisioning/docker_driver'
+  require "chef/provisioning/docker_driver"
 
   def with_docker(description, *tags, &block)
     context_block = proc do

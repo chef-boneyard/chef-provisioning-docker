@@ -1,7 +1,7 @@
-machine 'ssh2' do
+machine "ssh2" do
   action :destroy
 end
 
-machine 'ssh3' do
+machine "ssh3" do
   action :stop
 end
